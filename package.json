@@ -1,0 +1,22 @@
+{
+  "name": "askbid",
+  "version": "0.0.1",
+  "author": "Matt Wilde <wilde@outlook.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node src/client/main.ts",
+    "build": "cargo build-bpf --manifest-path=./src/program/Cargo.toml --bpf-out-dir=dist/program",
+    "deploy": "solana program deploy dist/program/askbid.so"
+  },
+  "devDependencies": {
+    "@types/mz": "^2.7.4",
+    "@types/node": "^16.6.1",
+    "ts-node": "^10.2.0",
+    "typescript": "^4.3.5"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.24.0",
+    "mz": "^2.7.0",
+    "yaml": "^1.10.2"
+  }
+}
