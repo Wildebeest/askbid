@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{AccountInfo},
     entrypoint,
@@ -5,6 +6,43 @@ use solana_program::{
     msg,
     pubkey::Pubkey,
 };
+
+pub mod instruction {
+    #[repr(C)]
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum SearchMarketInstruction {
+        Initialize,
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum SearchMarketState {
+    Open,
+    Closed,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct SearchMarketOrder {
+    pub issuer: Pubkey,
+    pub price: u64,
+    pub quantity: u64,
+    pub result: Pubkey,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct SearchMarketAccount {
+    pub issuer: Pubkey,
+    pub search_string: String,
+    pub order_book: Vec<SearchMarketOrder>,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct ResultAccount {
+    pub url: String,
+    pub title: String,
+    pub description: String,
+}
 
 entrypoint!(process_instruction);
 
@@ -18,3 +56,4 @@ pub fn process_instruction(
 
     Ok(())
 }
+
