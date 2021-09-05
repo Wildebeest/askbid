@@ -6,10 +6,10 @@ use solana_program::{
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
-    program::{invoke},
+    program::invoke,
     pubkey::Pubkey,
     rent::Rent,
-    sysvar::Sysvar,
+    sysvar,
 };
 use thiserror::Error;
 
@@ -21,7 +21,6 @@ pub enum SearchMarketInstruction {
         search_string: String,
     },
     CreateResult {
-        search_market: Pubkey,
         url: String,
         name: String,
         snippet: String,
@@ -50,6 +49,31 @@ pub fn create_market_instruction(
     })
 }
 
+pub fn create_result_instruction(
+    program_id: &Pubkey,
+    result_pubkey: &Pubkey,
+    market_pubkey: &Pubkey,
+    yes_mint_pubkey: &Pubkey,
+    no_mint_pubkey: &Pubkey,
+    url: String,
+    name: String,
+    snippet: String,
+) -> Result<Instruction, std::io::Error> {
+    let data = SearchMarketInstruction::CreateResult { url, name, snippet }.try_to_vec()?;
+    let accounts = vec![
+        AccountMeta::new(*result_pubkey, false),
+        AccountMeta::new_readonly(*market_pubkey, false),
+        AccountMeta::new(*yes_mint_pubkey, false),
+        AccountMeta::new(*no_mint_pubkey, false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+    ];
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct SearchMarketAccount {
     pub search_string: String,
@@ -57,17 +81,15 @@ pub struct SearchMarketAccount {
     pub expires_slot: Slot,
 }
 
-impl SearchMarketAccount {
-    pub fn space(&self) -> Result<usize, std::io::Error> {
-        Ok(self.try_to_vec()?.len())
-    }
-    pub fn minimum_balance(&self) -> Result<u64, std::io::Error> {
-        let space = self.space()?;
-        Ok(Rent::default().minimum_balance(space))
-    }
+pub fn space(account: &impl BorshSerialize) -> Result<usize, std::io::Error> {
+    Ok(account.try_to_vec()?.len())
+}
+pub fn minimum_balance(account: &impl BorshSerialize) -> Result<u64, std::io::Error> {
+    let space = space(account)?;
+    Ok(Rent::default().minimum_balance(space))
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct ResultAccount {
     pub search_market: Pubkey,
     pub url: String,
@@ -102,16 +124,19 @@ pub fn create_market(
 pub fn create_result(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    search_market: Pubkey,
     url: String,
     name: String,
     snippet: String,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let result_account_info = next_account_info(account_info_iter)?;
-    let rent_account_info = next_account_info(account_info_iter)?;
-    
+    let market_account_info = next_account_info(account_info_iter)?;
     let yes_mint_account_info = next_account_info(account_info_iter)?;
+    let no_mint_account_info = next_account_info(account_info_iter)?;
+    let rent_account_info = next_account_info(account_info_iter)?;
+
+    msg!("made it");
+
     invoke(
         &spl_token::instruction::initialize_mint(
             &spl_token::id(),
@@ -123,7 +148,6 @@ pub fn create_result(
         &[yes_mint_account_info.clone(), rent_account_info.clone()],
     )?;
 
-    let no_mint_account_info = next_account_info(account_info_iter)?;
     invoke(
         &spl_token::instruction::initialize_mint(
             &spl_token::id(),
@@ -136,7 +160,7 @@ pub fn create_result(
     )?;
 
     let result = ResultAccount {
-        search_market,
+        search_market: *market_account_info.key,
         url,
         name,
         snippet,
@@ -164,12 +188,9 @@ pub fn process_instruction(
             expires_slot,
             search_string,
         } => create_market(program_id, accounts, expires_slot, search_string),
-        SearchMarketInstruction::CreateResult {
-            search_market,
-            url,
-            name,
-            snippet,
-        } => create_result(program_id, accounts, search_market, url, name, snippet),
+        SearchMarketInstruction::CreateResult { url, name, snippet } => {
+            create_result(program_id, accounts, url, name, snippet)
+        }
         _ => Ok(()),
     }
 }
@@ -177,9 +198,23 @@ pub fn process_instruction(
 #[cfg(test)]
 mod test {
     use super::*;
-    use solana_sdk::account::{
-        Account as SolanaAccount,
-    };
+    use solana_program::program_pack::Pack;
+    use solana_sdk::account::{create_account_for_test, Account as SolanaAccount};
+    use spl_token::state::Mint;
+
+    fn get_account_infos<'a>(
+        instruction: &'a Instruction,
+        accounts: Vec<&'a mut SolanaAccount>,
+    ) -> Vec<AccountInfo<'a>> {
+        instruction
+            .accounts
+            .iter()
+            .zip(accounts)
+            .map(|(account_meta, account)| {
+                (&account_meta.pubkey, account_meta.is_signer, account).into()
+            })
+            .collect::<Vec<_>>()
+    }
 
     #[test]
     pub fn test_create_market() {
@@ -191,8 +226,8 @@ mod test {
         };
         let market_key = Pubkey::new_unique();
         let mut market_account = SolanaAccount::new(
-            market.minimum_balance().unwrap(),
-            market.space().unwrap(),
+            minimum_balance(&market).unwrap(),
+            space(&market).unwrap(),
             &program_id,
         );
         let create_market_instruction = create_market_instruction(
@@ -203,15 +238,7 @@ mod test {
         )
         .unwrap();
 
-        let accounts = create_market_instruction
-            .accounts
-            .iter()
-            .zip(vec![&mut market_account])
-            .map(|(account_meta, account)| {
-                (&account_meta.pubkey, account_meta.is_signer, account).into()
-            })
-            .collect::<Vec<_>>();
-
+        let accounts = get_account_infos(&create_market_instruction, vec![&mut market_account]);
         process_instruction(&program_id, &accounts[..], &create_market_instruction.data).unwrap();
 
         let processed_market =
@@ -221,6 +248,71 @@ mod test {
 
     #[test]
     pub fn test_create_result() {
+        let program_id = crate::id();
+        let market_key = Pubkey::new_unique();
+        let market = SearchMarketAccount {
+            best_result: None,
+            expires_slot: 0,
+            search_string: "cyberpunk".to_string(),
+        };
+        let mut market_account = SolanaAccount::new(
+            minimum_balance(&market).unwrap(),
+            space(&market).unwrap(),
+            &program_id,
+        );
 
+        let result_key = Pubkey::new_unique();
+        let result = ResultAccount {
+            search_market: market_key,
+            url: String::from("http://cyberpunk.net"),
+            name: String::from("Cyberpunk website"),
+            snippet: String::from("A game fated to be legend"),
+            yes_mint: Pubkey::new_unique(),
+            no_mint: Pubkey::new_unique(),
+        };
+        let mut result_account = SolanaAccount::new(
+            minimum_balance(&result).unwrap(),
+            space(&result).unwrap(),
+            &program_id,
+        );
+
+        let mut yes_mint_account = SolanaAccount::new(
+            Rent::default().minimum_balance(Mint::LEN),
+            Mint::LEN,
+            &program_id,
+        );
+
+        let mut no_mint_account = SolanaAccount::new(
+            Rent::default().minimum_balance(Mint::LEN),
+            Mint::LEN,
+            &program_id,
+        );
+
+        let mut rent_account = create_account_for_test(&Rent::default());
+
+        let create_result_instruction = create_result_instruction(
+            &program_id,
+            &result_key,
+            &market_key,
+            &result.yes_mint,
+            &result.no_mint,
+            result.url.clone(),
+            result.name.clone(),
+            result.snippet.clone(),
+        )
+        .unwrap();
+        let accounts = get_account_infos(
+            &create_result_instruction,
+            vec![
+                &mut result_account,
+                &mut market_account,
+                &mut yes_mint_account,
+                &mut no_mint_account,
+                &mut rent_account,
+            ],
+        );
+        process_instruction(&program_id, &accounts[..], &create_result_instruction.data).unwrap();
+        let processed_result = ResultAccount::try_from_slice(&result_account.data[..]).unwrap();
+        assert_eq!(result, processed_result);
     }
 }
