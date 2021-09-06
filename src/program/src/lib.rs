@@ -276,14 +276,12 @@ pub fn process_instruction(
 mod test {
     use super::*;
     use solana_program::program_pack::Pack;
-    use solana_program_test::{processor, BanksClient, ProgramTest};
+    use solana_program_test::{processor, ProgramTest};
     use solana_sdk::{
         account::{create_account_for_test, Account as SolanaAccount},
-        genesis_config::create_genesis_config,
-        native_token::sol_to_lamports,
-        signature::Signer,
+        commitment_config::CommitmentLevel,
+        signature::{Keypair, Signer},
         transaction::Transaction,
-        system_program,
     };
     use spl_token::state::Mint;
 
@@ -424,9 +422,10 @@ mod test {
         result_account.data = result.try_to_vec().unwrap();
         program_test.add_account(result_pubkey, result_account);
 
-        let deposit_pubkey = Pubkey::new_unique();
-        let deposit_account = SolanaAccount::new(100, 0, &program_id);
-        program_test.add_account(deposit_pubkey, deposit_account);
+        let deposit_keypair = Keypair::new();
+        let deposit_account =
+            SolanaAccount::new(Rent::default().minimum_balance(0) + 10000000, 0, &program_id);
+        program_test.add_account(deposit_keypair.pubkey(), deposit_account);
 
         let yes_mint_account = SolanaAccount::new(
             Rent::default().minimum_balance(Mint::LEN),
@@ -463,7 +462,7 @@ mod test {
         let deposit_instruction = deposit_instruction(
             &program_id,
             &result_pubkey,
-            &deposit_pubkey,
+            &deposit_keypair.pubkey(),
             &result.yes_mint,
             &yes_token_pubkey,
             &result.no_mint,
@@ -472,13 +471,22 @@ mod test {
         )
         .unwrap();
 
-        let mut transaction =
-            Transaction::new_with_payer(&[deposit_instruction], Some(&payer.pubkey()));
-        transaction.sign(&[&payer], recent_blockhash);
+        let mut transaction = Transaction::new_with_payer(
+            &[transfer(&deposit_keypair.pubkey(), &result_pubkey, 100)],
+            Some(&deposit_keypair.pubkey()),
+        );
+        transaction.sign(&[&deposit_keypair], recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
+        println!("AAAAA");
+
+        // let mut transaction =
+        //     Transaction::new_with_payer(&[deposit_instruction], Some(&payer.pubkey()));
+        // transaction.sign(&[&payer], recent_blockhash);
+        // banks_client.process_transaction(transaction).await.unwrap();
+
         let deposit_account = banks_client
-            .get_account(deposit_pubkey)
+            .get_account(deposit_keypair.pubkey())
             .await
             .unwrap()
             .unwrap();
