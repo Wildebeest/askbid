@@ -1606,9 +1606,11 @@ dependencies = [
  "borsh-derive",
  "solana-program",
  "solana-program-test",
+ "solana-runtime",
  "solana-sdk",
  "spl-token",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
