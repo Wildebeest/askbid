@@ -6,11 +6,11 @@ use solana_program::{
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
-    program::{invoke, invoke_signed},
+    program::invoke,
     pubkey::Pubkey,
     rent::Rent,
     system_instruction::transfer,
-    sysvar,
+    system_program, sysvar,
 };
 use thiserror::Error;
 
@@ -90,8 +90,8 @@ pub fn deposit_instruction(
     let data = SearchMarketInstruction::Deposit { amount }.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*result_pubkey, false),
-        AccountMeta::new(*deposit_pubkey, false),
-        AccountMeta::new_readonly(spl_token::id(), false),
+        AccountMeta::new(*deposit_pubkey, true),
+        AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
@@ -206,6 +206,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     let account_info_iter = &mut accounts.iter();
     let result_account_info = next_account_info(account_info_iter)?;
     let deposit_account_info = next_account_info(account_info_iter)?;
+    let system_program_account_info = next_account_info(account_info_iter)?;
     let yes_mint_account_info = next_account_info(account_info_iter)?;
     let yes_token_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
@@ -215,36 +216,40 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
 
     invoke(
         &transfer(deposit_account_info.key, result_account_info.key, amount),
-        &[deposit_account_info.clone(), result_account_info.clone()],
+        &[
+            deposit_account_info.clone(),
+            result_account_info.clone(),
+            system_program_account_info.clone(),
+        ],
     )?;
     msg!("made it");
 
-    invoke(
-        &spl_token::instruction::mint_to(
-            &spl_token::id(),
-            &result.yes_mint,
-            yes_token_account_info.key,
-            yes_token_account_info.key,
-            &[program_id],
-            amount,
-        )?,
-        &[
-            yes_mint_account_info.clone(),
-            yes_token_account_info.clone(),
-        ],
-    )?;
+    // invoke(
+    //     &spl_token::instruction::mint_to(
+    //         &spl_token::id(),
+    //         &result.yes_mint,
+    //         yes_token_account_info.key,
+    //         yes_token_account_info.key,
+    //         &[program_id],
+    //         amount,
+    //     )?,
+    //     &[
+    //         yes_mint_account_info.clone(),
+    //         yes_token_account_info.clone(),
+    //     ],
+    // )?;
 
-    invoke(
-        &spl_token::instruction::mint_to(
-            &spl_token::id(),
-            &result.no_mint,
-            no_token_account_info.key,
-            no_token_account_info.key,
-            &[program_id],
-            amount,
-        )?,
-        &[no_mint_account_info.clone(), no_token_account_info.clone()],
-    )?;
+    // invoke(
+    //     &spl_token::instruction::mint_to(
+    //         &spl_token::id(),
+    //         &result.no_mint,
+    //         no_token_account_info.key,
+    //         no_token_account_info.key,
+    //         &[program_id],
+    //         amount,
+    //     )?,
+    //     &[no_mint_account_info.clone(), no_token_account_info.clone()],
+    // )?;
 
     Ok(())
 }
@@ -279,8 +284,8 @@ mod test {
     use solana_program_test::{processor, ProgramTest};
     use solana_sdk::{
         account::{create_account_for_test, Account as SolanaAccount},
-        commitment_config::CommitmentLevel,
         signature::{Keypair, Signer},
+        sysvar::{fees::Fees, Sysvar},
         transaction::Transaction,
     };
     use spl_token::state::Mint;
@@ -414,17 +419,22 @@ mod test {
             yes_mint: Pubkey::new_unique(),
             no_mint: Pubkey::new_unique(),
         };
+        let result_min_balance = minimum_balance(&result).unwrap();
         let mut result_account = SolanaAccount::new(
-            minimum_balance(&result).unwrap(),
+            result_min_balance,
             result.try_to_vec().unwrap().len(),
             &program_id,
         );
         result_account.data = result.try_to_vec().unwrap();
         program_test.add_account(result_pubkey, result_account);
 
+        let deposit_min_balance = Rent::default().minimum_balance(0);
         let deposit_keypair = Keypair::new();
-        let deposit_account =
-            SolanaAccount::new(Rent::default().minimum_balance(0) + 10000000, 0, &program_id);
+        let deposit_account = SolanaAccount::new(
+            deposit_min_balance + 100,
+            0,
+            &system_program::id(),
+        );
         program_test.add_account(deposit_keypair.pubkey(), deposit_account);
 
         let yes_mint_account = SolanaAccount::new(
@@ -471,25 +481,24 @@ mod test {
         )
         .unwrap();
 
-        let mut transaction = Transaction::new_with_payer(
-            &[transfer(&deposit_keypair.pubkey(), &result_pubkey, 100)],
-            Some(&deposit_keypair.pubkey()),
-        );
-        transaction.sign(&[&deposit_keypair], recent_blockhash);
+        let mut transaction =
+            Transaction::new_with_payer(&[deposit_instruction], Some(&payer.pubkey()));
+        transaction.sign(&[&payer, &deposit_keypair], recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
-        println!("AAAAA");
-
-        // let mut transaction =
-        //     Transaction::new_with_payer(&[deposit_instruction], Some(&payer.pubkey()));
-        // transaction.sign(&[&payer], recent_blockhash);
-        // banks_client.process_transaction(transaction).await.unwrap();
+        let result_account = banks_client
+            .get_account(result_pubkey)
+            .await
+            .unwrap()
+            .unwrap();
 
         let deposit_account = banks_client
             .get_account(deposit_keypair.pubkey())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(0, deposit_account.lamports);
+
+        assert_eq!(result_min_balance + 100, result_account.lamports);
+        assert_eq!(deposit_min_balance, deposit_account.lamports);
     }
 }
