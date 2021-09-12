@@ -6,7 +6,7 @@ use solana_program::{
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
-    program::invoke,
+    program::{invoke, invoke_signed},
     pubkey::Pubkey,
     rent::Rent,
     system_instruction::transfer,
@@ -25,6 +25,7 @@ pub enum SearchMarketInstruction {
         url: String,
         name: String,
         snippet: String,
+        bump_seed: u8,
     },
     Deposit {
         amount: u64,
@@ -62,13 +63,23 @@ pub fn create_result_instruction(
     name: String,
     snippet: String,
 ) -> Result<Instruction, std::io::Error> {
-    let data = SearchMarketInstruction::CreateResult { url, name, snippet }.try_to_vec()?;
+    let (mint_authority_key, bump_seed) =
+        Pubkey::find_program_address(&[b"mint_authority"], program_id);
+    let data = SearchMarketInstruction::CreateResult {
+        url,
+        name,
+        snippet,
+        bump_seed,
+    }
+    .try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*result_pubkey, false),
         AccountMeta::new_readonly(*market_pubkey, false),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
+        AccountMeta::new_readonly(mint_authority_key, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
     ];
     Ok(Instruction {
         program_id: *program_id,
@@ -87,11 +98,15 @@ pub fn deposit_instruction(
     no_token_pubkey: &Pubkey,
     amount: u64,
 ) -> Result<Instruction, std::io::Error> {
+    let (mint_authority_key, _bump_seed) =
+        Pubkey::find_program_address(&[b"mint_authority"], program_id);
     let data = SearchMarketInstruction::Deposit { amount }.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*result_pubkey, false),
         AccountMeta::new(*deposit_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+        AccountMeta::new_readonly(mint_authority_key, false),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
@@ -111,6 +126,17 @@ pub struct SearchMarketAccount {
     pub best_result: Option<Pubkey>,
     pub expires_slot: Slot,
 }
+impl std::fmt::Display for SearchMarketAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "({}, {}, {})",
+            self.search_string,
+            self.expires_slot,
+            self.best_result.is_some()
+        )
+    }
+}
 
 pub fn space(account: &impl BorshSerialize) -> Result<usize, std::io::Error> {
     Ok(account.try_to_vec()?.len())
@@ -128,6 +154,7 @@ pub struct ResultAccount {
     pub snippet: String,
     pub yes_mint: Pubkey,
     pub no_mint: Pubkey,
+    pub bump_seed: u8,
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
@@ -147,9 +174,11 @@ pub fn create_market(
         expires_slot,
     };
 
-    search_market
-        .serialize(&mut *market_account_info.data.borrow_mut())
-        .map_err(|e| e.into())
+    let result = search_market
+        .serialize(&mut &mut market_account_info.data.borrow_mut()[..])
+        .map_err(|e| e.into());
+
+    return result;
 }
 
 pub fn create_result(
@@ -158,34 +187,45 @@ pub fn create_result(
     url: String,
     name: String,
     snippet: String,
+    bump_seed: u8,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let result_account_info = next_account_info(account_info_iter)?;
     let market_account_info = next_account_info(account_info_iter)?;
     let yes_mint_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
+    let mint_authority_info = next_account_info(account_info_iter)?;
     let rent_account_info = next_account_info(account_info_iter)?;
+    let spl_token_account_info = next_account_info(account_info_iter)?;
 
     invoke(
         &spl_token::instruction::initialize_mint(
             &spl_token::id(),
             yes_mint_account_info.key,
-            program_id,
+            mint_authority_info.key,
             None,
             spl_token::native_mint::DECIMALS,
         )?,
-        &[yes_mint_account_info.clone(), rent_account_info.clone()],
+        &[
+            yes_mint_account_info.clone(),
+            rent_account_info.clone(),
+            spl_token_account_info.clone(),
+        ],
     )?;
 
     invoke(
         &spl_token::instruction::initialize_mint(
             &spl_token::id(),
             no_mint_account_info.key,
-            program_id,
+            mint_authority_info.key,
             None,
             spl_token::native_mint::DECIMALS,
         )?,
-        &[no_mint_account_info.clone(), rent_account_info.clone()],
+        &[
+            no_mint_account_info.clone(),
+            rent_account_info.clone(),
+            spl_token_account_info.clone(),
+        ],
     )?;
 
     let result = ResultAccount {
@@ -195,10 +235,11 @@ pub fn create_result(
         snippet,
         yes_mint: *yes_mint_account_info.key,
         no_mint: *no_mint_account_info.key,
+        bump_seed,
     };
 
     result
-        .serialize(&mut *result_account_info.data.borrow_mut())
+        .serialize(&mut &mut result_account_info.data.borrow_mut()[..])
         .map_err(|e| e.into())
 }
 
@@ -206,7 +247,9 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     let account_info_iter = &mut accounts.iter();
     let result_account_info = next_account_info(account_info_iter)?;
     let deposit_account_info = next_account_info(account_info_iter)?;
-    let system_program_account_info = next_account_info(account_info_iter)?;
+    let system_program_info = next_account_info(account_info_iter)?;
+    let spl_token_program_info = next_account_info(account_info_iter)?;
+    let mint_authority_info = next_account_info(account_info_iter)?;
     let yes_mint_account_info = next_account_info(account_info_iter)?;
     let yes_token_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
@@ -219,25 +262,27 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
         &[
             deposit_account_info.clone(),
             result_account_info.clone(),
-            system_program_account_info.clone(),
+            system_program_info.clone(),
         ],
     )?;
-    msg!("made it");
 
-    // invoke(
-    //     &spl_token::instruction::mint_to(
-    //         &spl_token::id(),
-    //         &result.yes_mint,
-    //         yes_token_account_info.key,
-    //         yes_token_account_info.key,
-    //         &[program_id],
-    //         amount,
-    //     )?,
-    //     &[
-    //         yes_mint_account_info.clone(),
-    //         yes_token_account_info.clone(),
-    //     ],
-    // )?;
+    invoke_signed(
+        &spl_token::instruction::mint_to(
+            spl_token_program_info.key,
+            yes_mint_account_info.key,
+            yes_token_account_info.key,
+            mint_authority_info.key,
+            &[],
+            amount,
+        )?,
+        &[
+            yes_mint_account_info.clone(),
+            yes_token_account_info.clone(),
+            mint_authority_info.clone(),
+            spl_token_program_info.clone(),
+        ],
+        &[&[b"mint_authority", &[result.bump_seed]]],
+    )?;
 
     // invoke(
     //     &spl_token::instruction::mint_to(
@@ -269,9 +314,12 @@ pub fn process_instruction(
             expires_slot,
             search_string,
         } => create_market(program_id, accounts, expires_slot, search_string),
-        SearchMarketInstruction::CreateResult { url, name, snippet } => {
-            create_result(program_id, accounts, url, name, snippet)
-        }
+        SearchMarketInstruction::CreateResult {
+            url,
+            name,
+            snippet,
+            bump_seed,
+        } => create_result(program_id, accounts, url, name, snippet, bump_seed),
         SearchMarketInstruction::Deposit { amount } => deposit(program_id, accounts, amount),
         _ => Ok(()),
     }
@@ -283,41 +331,31 @@ mod test {
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
     use solana_sdk::{
-        account::{create_account_for_test, Account as SolanaAccount},
+        account::Account as SolanaAccount,
         signature::{Keypair, Signer},
-        sysvar::{fees::Fees, Sysvar},
         transaction::Transaction,
     };
-    use spl_token::state::Mint;
+    use spl_token::state::{Account, Mint};
 
-    fn get_account_infos<'a>(
-        instruction: &'a Instruction,
-        accounts: Vec<&'a mut SolanaAccount>,
-    ) -> Vec<AccountInfo<'a>> {
-        instruction
-            .accounts
-            .iter()
-            .zip(accounts)
-            .map(|(account_meta, account)| {
-                (&account_meta.pubkey, account_meta.is_signer, account).into()
-            })
-            .collect::<Vec<_>>()
-    }
-
-    #[test]
-    pub fn test_create_market() {
+    #[tokio::test]
+    async fn test_create_market() {
         let program_id = crate::id();
+        let mut program_test =
+            ProgramTest::new("askbid", program_id, processor!(process_instruction));
+
         let market = SearchMarketAccount {
             best_result: None,
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
         let market_key = Pubkey::new_unique();
-        let mut market_account = SolanaAccount::new(
+        let market_account = SolanaAccount::new(
             minimum_balance(&market).unwrap(),
             space(&market).unwrap(),
             &program_id,
         );
+        program_test.add_account(market_key, market_account);
+
         let create_market_instruction = create_market_instruction(
             &program_id,
             &market_key,
@@ -326,30 +364,40 @@ mod test {
         )
         .unwrap();
 
-        let accounts = get_account_infos(&create_market_instruction, vec![&mut market_account]);
-        process_instruction(&program_id, &accounts[..], &create_market_instruction.data).unwrap();
+        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+        let mut transaction =
+            Transaction::new_with_payer(&[create_market_instruction], Some(&payer.pubkey()));
+        transaction.sign(&[&payer], recent_blockhash);
+        banks_client.process_transaction(transaction).await.unwrap();
 
+        let market_account = banks_client.get_account(market_key).await.unwrap().unwrap();
         let processed_market =
             SearchMarketAccount::try_from_slice(&market_account.data[..]).unwrap();
         assert_eq!(market, processed_market);
     }
 
-    #[test]
-    pub fn test_create_result() {
+    #[tokio::test]
+    async fn test_create_result() {
         let program_id = crate::id();
+        let mut program_test =
+            ProgramTest::new("askbid", program_id, processor!(process_instruction));
+
         let market_key = Pubkey::new_unique();
         let market = SearchMarketAccount {
             best_result: None,
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
-        let mut market_account = SolanaAccount::new(
+        let market_account = SolanaAccount::new(
             minimum_balance(&market).unwrap(),
             space(&market).unwrap(),
             &program_id,
         );
+        program_test.add_account(market_key, market_account);
 
         let result_key = Pubkey::new_unique();
+        let (_mint_authority_key, bump_seed) =
+            Pubkey::find_program_address(&[b"mint_authority"], &program_id);
         let result = ResultAccount {
             search_market: market_key,
             url: String::from("http://cyberpunk.net"),
@@ -357,26 +405,28 @@ mod test {
             snippet: String::from("A game fated to be legend"),
             yes_mint: Pubkey::new_unique(),
             no_mint: Pubkey::new_unique(),
+            bump_seed,
         };
-        let mut result_account = SolanaAccount::new(
+        let result_account = SolanaAccount::new(
             minimum_balance(&result).unwrap(),
             space(&result).unwrap(),
             &program_id,
         );
+        program_test.add_account(result_key, result_account);
 
-        let mut yes_mint_account = SolanaAccount::new(
+        let yes_mint_account = SolanaAccount::new(
             Rent::default().minimum_balance(Mint::LEN),
             Mint::LEN,
-            &program_id,
+            &spl_token::id(),
         );
+        program_test.add_account(result.yes_mint, yes_mint_account);
 
-        let mut no_mint_account = SolanaAccount::new(
+        let no_mint_account = SolanaAccount::new(
             Rent::default().minimum_balance(Mint::LEN),
             Mint::LEN,
-            &program_id,
+            &spl_token::id(),
         );
-
-        let mut rent_account = create_account_for_test(&Rent::default());
+        program_test.add_account(result.no_mint, no_mint_account);
 
         let create_result_instruction = create_result_instruction(
             &program_id,
@@ -389,19 +439,31 @@ mod test {
             result.snippet.clone(),
         )
         .unwrap();
-        let accounts = get_account_infos(
-            &create_result_instruction,
-            vec![
-                &mut result_account,
-                &mut market_account,
-                &mut yes_mint_account,
-                &mut no_mint_account,
-                &mut rent_account,
-            ],
-        );
-        process_instruction(&program_id, &accounts[..], &create_result_instruction.data).unwrap();
+        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+        let mut transaction =
+            Transaction::new_with_payer(&[create_result_instruction], Some(&payer.pubkey()));
+        transaction.sign(&[&payer], recent_blockhash);
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
         let processed_result = ResultAccount::try_from_slice(&result_account.data[..]).unwrap();
         assert_eq!(result, processed_result);
+
+        let yes_mint_account = banks_client
+            .get_account(result.yes_mint)
+            .await
+            .unwrap()
+            .unwrap();
+        let processed_mint = Mint::unpack_from_slice(&yes_mint_account.data[..]).unwrap();
+        assert_eq!(true, processed_mint.is_initialized);
+
+        let no_mint_account = banks_client
+            .get_account(result.no_mint)
+            .await
+            .unwrap()
+            .unwrap();
+        let processed_mint = Mint::unpack_from_slice(&no_mint_account.data[..]).unwrap();
+        assert_eq!(true, processed_mint.is_initialized);
     }
 
     #[tokio::test]
@@ -411,6 +473,8 @@ mod test {
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
         let result_pubkey = Pubkey::new_unique();
+        let (_mint_authority_key, bump_seed) =
+            Pubkey::find_program_address(&[b"mint_authority"], &program_id);
         let result = ResultAccount {
             search_market: Pubkey::new_unique(),
             url: String::from("http://cyberpunk.net"),
@@ -418,6 +482,7 @@ mod test {
             snippet: String::from("A game fated to be legend"),
             yes_mint: Pubkey::new_unique(),
             no_mint: Pubkey::new_unique(),
+            bump_seed,
         };
         let result_min_balance = minimum_balance(&result).unwrap();
         let mut result_account = SolanaAccount::new(
@@ -430,24 +495,21 @@ mod test {
 
         let deposit_min_balance = Rent::default().minimum_balance(0);
         let deposit_keypair = Keypair::new();
-        let deposit_account = SolanaAccount::new(
-            deposit_min_balance + 100,
-            0,
-            &system_program::id(),
-        );
+        let deposit_account =
+            SolanaAccount::new(deposit_min_balance + 100, 0, &system_program::id());
         program_test.add_account(deposit_keypair.pubkey(), deposit_account);
 
         let yes_mint_account = SolanaAccount::new(
             Rent::default().minimum_balance(Mint::LEN),
             Mint::LEN,
-            &program_id,
+            &spl_token::id(),
         );
         program_test.add_account(result.yes_mint, yes_mint_account);
 
         let no_mint_account = SolanaAccount::new(
             Rent::default().minimum_balance(Mint::LEN),
             Mint::LEN,
-            &program_id,
+            &spl_token::id(),
         );
         program_test.add_account(result.no_mint, no_mint_account);
 
@@ -500,5 +562,13 @@ mod test {
 
         assert_eq!(result_min_balance + 100, result_account.lamports);
         assert_eq!(deposit_min_balance, deposit_account.lamports);
+
+        let yes_token_account = banks_client
+            .get_account(yes_token_pubkey)
+            .await
+            .unwrap()
+            .unwrap();
+        let yes_token_data = Account::unpack_from_slice(&yes_token_account.data).unwrap();
+        assert_eq!(yes_token_data.amount, 100);
     }
 }
