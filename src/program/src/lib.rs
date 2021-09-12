@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
+    clock::Clock,
     clock::Slot,
     entrypoint,
     entrypoint::ProgramResult,
@@ -30,7 +31,9 @@ pub enum SearchMarketInstruction {
     Deposit {
         amount: u64,
     },
-    Withdraw,
+    Withdraw {
+        amount: u64,
+    },
     Decide,
 }
 
@@ -107,6 +110,37 @@ pub fn deposit_instruction(
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new_readonly(mint_authority_key, false),
+        AccountMeta::new(*yes_mint_pubkey, false),
+        AccountMeta::new(*yes_token_pubkey, false),
+        AccountMeta::new(*no_mint_pubkey, false),
+        AccountMeta::new(*no_token_pubkey, false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+pub fn withdraw_instruction(
+    program_id: &Pubkey,
+    result_pubkey: &Pubkey,
+    withdraw_pubkey: &Pubkey,
+    yes_mint_pubkey: &Pubkey,
+    yes_token_pubkey: &Pubkey,
+    no_mint_pubkey: &Pubkey,
+    no_token_pubkey: &Pubkey,
+    amount: u64,
+) -> Result<Instruction, std::io::Error> {
+    let (mint_authority_key, _bump_seed) =
+        Pubkey::find_program_address(&[b"mint_authority"], program_id);
+    let data = SearchMarketInstruction::Withdraw { amount }.try_to_vec()?;
+    let accounts = vec![
+        AccountMeta::new(*result_pubkey, false),
+        AccountMeta::new(*withdraw_pubkey, false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
@@ -305,6 +339,31 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     Ok(())
 }
 
+pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
+    let account_info_iter = &mut accounts.iter();
+    let result_account_info = next_account_info(account_info_iter)?;
+    let withdraw_account_info = next_account_info(account_info_iter)?;
+    let system_program_info = next_account_info(account_info_iter)?;
+    let spl_token_program_info = next_account_info(account_info_iter)?;
+    let yes_mint_account_info = next_account_info(account_info_iter)?;
+    let yes_token_account_info = next_account_info(account_info_iter)?;
+    let no_mint_account_info = next_account_info(account_info_iter)?;
+    let no_token_account_info = next_account_info(account_info_iter)?;
+
+    let result = ResultAccount::try_from_slice(&result_account_info.data.borrow())?;
+    
+    invoke(
+        &transfer(result_account_info.key, withdraw_account_info.key, amount),
+        &[
+            result_account_info.clone(),
+            withdraw_account_info.clone(),
+            system_program_info.clone(),
+        ],
+    )?;
+
+    Ok(())
+}
+
 solana_program::declare_id!("My11111111111111111111111111111111111111111");
 entrypoint!(process_instruction);
 
@@ -327,6 +386,7 @@ pub fn process_instruction(
             bump_seed,
         } => create_result(program_id, accounts, url, name, snippet, bump_seed),
         SearchMarketInstruction::Deposit { amount } => deposit(program_id, accounts, amount),
+        SearchMarketInstruction::Withdraw { amount } => withdraw(program_id, accounts, amount),
         _ => Ok(()),
     }
 }
@@ -486,6 +546,60 @@ mod test {
         assert_eq!(true, processed_mint.is_initialized);
     }
 
+    fn setup_token(
+        mint: &Pubkey,
+        owner: &Pubkey,
+        program_test: &mut ProgramTest,
+        program_id: &Pubkey,
+    ) -> (Pubkey, Instruction) {
+        let token_pubkey = Pubkey::new_unique();
+        let token_account = SolanaAccount::new(
+            Rent::default().minimum_balance(spl_token::state::Account::LEN),
+            spl_token::state::Account::LEN,
+            &spl_token::id(),
+        );
+        program_test.add_account(token_pubkey, token_account);
+        let init_token = spl_token::instruction::initialize_account(
+            &spl_token::id(),
+            &token_pubkey,
+            mint,
+            owner,
+        )
+        .unwrap();
+
+        return (token_pubkey, init_token);
+    }
+
+    fn setup_deposit(
+        deposit_key: &Pubkey,
+        amount: u64,
+        result_key: &Pubkey,
+        result: &ResultAccount,
+        yes_token_pubkey: &Pubkey,
+        no_token_pubkey: &Pubkey,
+        program_test: &mut ProgramTest,
+        program_id: &Pubkey,
+    ) -> Instruction {
+        let deposit_min_balance = Rent::default().minimum_balance(0);
+        let deposit_account =
+            SolanaAccount::new(deposit_min_balance + amount, 0, &system_program::id());
+        program_test.add_account(*deposit_key, deposit_account);
+
+        let deposit_instruction = deposit_instruction(
+            &program_id,
+            &result_key,
+            &deposit_key,
+            &result.yes_mint,
+            &yes_token_pubkey,
+            &result.no_mint,
+            &no_token_pubkey,
+            amount,
+        )
+        .unwrap();
+
+        return deposit_instruction;
+    }
+
     #[tokio::test]
     async fn test_deposit() {
         let program_id = crate::id();
@@ -511,53 +625,34 @@ mod test {
         let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
         let result_min_balance = minimum_balance(&result).unwrap();
 
-        let deposit_min_balance = Rent::default().minimum_balance(0);
         let deposit_keypair = Keypair::new();
-        let deposit_account =
-            SolanaAccount::new(deposit_min_balance + 100, 0, &system_program::id());
-        program_test.add_account(deposit_keypair.pubkey(), deposit_account);
-
-        let yes_token_pubkey = Pubkey::new_unique();
-        let yes_token_account = SolanaAccount::new(
-            Rent::default().minimum_balance(spl_token::state::Account::LEN),
-            spl_token::state::Account::LEN,
-            &spl_token::id(),
-        );
-        program_test.add_account(yes_token_pubkey, yes_token_account);
-        let init_yes_token = spl_token::instruction::initialize_account(
-            &spl_token::id(),
-            &yes_token_pubkey,
+        let (yes_token_pubkey, init_yes_token) = setup_token(
             &result.yes_mint,
             &deposit_keypair.pubkey(),
-        ).unwrap();
-
-        let no_token_pubkey = Pubkey::new_unique();
-        let no_token_account = SolanaAccount::new(
-            Rent::default().minimum_balance(spl_token::state::Account::LEN),
-            spl_token::state::Account::LEN,
-            &spl_token::id(),
+            &mut program_test,
+            &program_id,
         );
-        program_test.add_account(no_token_pubkey, no_token_account);
-        let init_no_token = spl_token::instruction::initialize_account(
-            &spl_token::id(),
-            &no_token_pubkey,
+
+        let (no_token_pubkey, init_no_token) = setup_token(
             &result.no_mint,
             &deposit_keypair.pubkey(),
-        ).unwrap();
+            &mut program_test,
+            &program_id,
+        );
+
+        let deposit_min_balance = Rent::default().minimum_balance(0);
+        let deposit_instruction = setup_deposit(
+            &deposit_keypair.pubkey(),
+            100,
+            &result_key,
+            &result,
+            &yes_token_pubkey,
+            &no_token_pubkey,
+            &mut program_test,
+            &program_id,
+        );
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
-
-        let deposit_instruction = deposit_instruction(
-            &program_id,
-            &result_key,
-            &deposit_keypair.pubkey(),
-            &result.yes_mint,
-            &yes_token_pubkey,
-            &result.no_mint,
-            &no_token_pubkey,
-            100,
-        )
-        .unwrap();
 
         let mut transaction = Transaction::new_with_payer(
             &[
@@ -598,5 +693,113 @@ mod test {
             .unwrap();
         let no_token_data = Account::unpack_from_slice(&no_token_account.data).unwrap();
         assert_eq!(no_token_data.amount, 100);
+    }
+
+    #[tokio::test]
+    async fn test_withdraw() {
+        let program_id = crate::id();
+        let mut program_test =
+            ProgramTest::new("askbid", program_id, processor!(process_instruction));
+
+        let market = SearchMarketAccount {
+            best_result: None,
+            expires_slot: 0,
+            search_string: "cyberpunk".to_string(),
+        };
+        let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
+
+        let mut result = ResultAccount {
+            search_market: market_key,
+            url: String::from("http://cyberpunk.net"),
+            name: String::from("Cyberpunk website"),
+            snippet: String::from("A game fated to be legend"),
+            yes_mint: Pubkey::new_unique(),
+            no_mint: Pubkey::new_unique(),
+            bump_seed: 0,
+        };
+        let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
+        let result_min_balance = minimum_balance(&result).unwrap();
+
+        let deposit_keypair = Keypair::new();
+        let (yes_token_pubkey, init_yes_token) = setup_token(
+            &result.yes_mint,
+            &deposit_keypair.pubkey(),
+            &mut program_test,
+            &program_id,
+        );
+
+        let (no_token_pubkey, init_no_token) = setup_token(
+            &result.no_mint,
+            &deposit_keypair.pubkey(),
+            &mut program_test,
+            &program_id,
+        );
+
+        let deposit_instruction = setup_deposit(
+            &deposit_keypair.pubkey(),
+            100,
+            &result_key,
+            &result,
+            &yes_token_pubkey,
+            &no_token_pubkey,
+            &mut program_test,
+            &program_id,
+        );
+
+        let withdraw_keypair = Keypair::new();
+        let withdraw_instruction = withdraw_instruction(
+            &program_id,
+            &result_key,
+            &withdraw_keypair.pubkey(),
+            &result.yes_mint,
+            &yes_token_pubkey,
+            &result.no_mint,
+            &no_token_pubkey,
+            99,
+        )
+        .unwrap();
+
+        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                create_market,
+                create_result,
+                init_yes_token,
+                init_no_token,
+                deposit_instruction,
+                withdraw_instruction,
+            ],
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(&[&payer, &deposit_keypair], recent_blockhash);
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
+        assert_eq!(result_min_balance + 1, result_account.lamports);
+
+        let withdraw_min_balance = Rent::default().minimum_balance(0);
+        let withdraw_account = banks_client
+            .get_account(withdraw_keypair.pubkey())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(withdraw_min_balance + 99, withdraw_account.lamports);
+
+        let yes_token_account = banks_client
+            .get_account(yes_token_pubkey)
+            .await
+            .unwrap()
+            .unwrap();
+        let yes_token_data = Account::unpack_from_slice(&yes_token_account.data).unwrap();
+        assert_eq!(yes_token_data.amount, 1);
+
+        let no_token_account = banks_client
+            .get_account(no_token_pubkey)
+            .await
+            .unwrap()
+            .unwrap();
+        let no_token_data = Account::unpack_from_slice(&no_token_account.data).unwrap();
+        assert_eq!(no_token_data.amount, 1);
     }
 }
