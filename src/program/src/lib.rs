@@ -1,13 +1,13 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Clock,
-    clock::Slot,
+    clock::{Clock, Slot},
     entrypoint,
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
     program::{invoke, invoke_signed},
+    program_error::{ProgramError},
     pubkey::Pubkey,
     rent::Rent,
     system_instruction::transfer,
@@ -40,6 +40,7 @@ pub enum SearchMarketInstruction {
 pub fn create_market_instruction(
     program_id: &Pubkey,
     market_pubkey: &Pubkey,
+    decision_pubkey: &Pubkey,
     expires_slot: Slot,
     search_string: String,
 ) -> Result<Instruction, std::io::Error> {
@@ -48,7 +49,10 @@ pub fn create_market_instruction(
         search_string,
     }
     .try_to_vec()?;
-    let accounts = vec![AccountMeta::new(*market_pubkey, false)];
+    let accounts = vec![
+        AccountMeta::new(*market_pubkey, false),
+        AccountMeta::new(*decision_pubkey, true),
+    ];
     Ok(Instruction {
         program_id: *program_id,
         accounts,
@@ -157,10 +161,30 @@ pub fn withdraw_instruction(
     })
 }
 
+pub fn decide_instruction(
+    program_id: &Pubkey,
+    market_pubkey: &Pubkey,
+    decision_authority_pubkey: &Pubkey,
+    best_result_pubkey: &Pubkey,
+) -> Result<Instruction, std::io::Error> {
+    let data = SearchMarketInstruction::Decide.try_to_vec()?;
+    let accounts = vec![
+        AccountMeta::new(*market_pubkey, false),
+        AccountMeta::new_readonly(*decision_authority_pubkey, true),
+        AccountMeta::new(*best_result_pubkey, false),
+    ];
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct SearchMarketAccount {
+    pub decision_authority: Pubkey,
     pub search_string: String,
-    pub best_result: Option<Pubkey>,
+    pub best_result: Pubkey,
     pub expires_slot: Slot,
 }
 impl std::fmt::Display for SearchMarketAccount {
@@ -168,9 +192,7 @@ impl std::fmt::Display for SearchMarketAccount {
         write!(
             f,
             "({}, {}, {})",
-            self.search_string,
-            self.expires_slot,
-            self.best_result.is_some()
+            self.search_string, self.expires_slot, self.best_result
         )
     }
 }
@@ -197,6 +219,10 @@ pub struct ResultAccount {
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum SearchMarketError {}
 
+mod undecided_result {
+    solana_program::declare_id!("My11111111111111111111111111111111111111112");
+}
+
 pub fn create_market(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -205,8 +231,10 @@ pub fn create_market(
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let market_account_info = next_account_info(account_info_iter)?;
+    let decision_authority_info = next_account_info(account_info_iter)?;
     let search_market = SearchMarketAccount {
-        best_result: None,
+        decision_authority: *decision_authority_info.key,
+        best_result: undecided_result::id(),
         search_string,
         expires_slot,
     };
@@ -404,6 +432,25 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     Ok(())
 }
 
+pub fn decide(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    let account_info_iter = &mut accounts.iter();
+    let market_account_info = next_account_info(account_info_iter)?;
+    let decision_authority_info = next_account_info(account_info_iter)?;
+    let best_result_info = next_account_info(account_info_iter)?;
+
+    let mut market =
+        SearchMarketAccount::try_from_slice(&market_account_info.data.borrow()).unwrap();
+
+    if market.decision_authority != *decision_authority_info.key {
+        return Err(ProgramError::InvalidAccountData)
+    }
+    market.best_result = *best_result_info.key;
+
+    market
+        .serialize(&mut &mut market_account_info.data.borrow_mut()[..])
+        .map_err(|e| e.into())
+}
+
 solana_program::declare_id!("My11111111111111111111111111111111111111111");
 entrypoint!(process_instruction);
 
@@ -427,6 +474,7 @@ pub fn process_instruction(
         } => create_result(program_id, accounts, url, name, snippet, bump_seed),
         SearchMarketInstruction::Deposit { amount } => deposit(program_id, accounts, amount),
         SearchMarketInstruction::Withdraw { amount } => withdraw(program_id, accounts, amount),
+        SearchMarketInstruction::Decide => decide(program_id, accounts),
         _ => Ok(()),
     }
 }
@@ -459,6 +507,7 @@ mod test {
         let instruction = create_market_instruction(
             program_id,
             &market_key,
+            &market.decision_authority,
             market.expires_slot,
             market.search_string.clone(),
         )
@@ -472,8 +521,10 @@ mod test {
         let mut program_test =
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
+        let decision_authority = Keypair::new();
         let market = SearchMarketAccount {
-            best_result: None,
+            decision_authority: decision_authority.pubkey(),
+            best_result: undecided_result::id(),
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
@@ -481,7 +532,7 @@ mod test {
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction = Transaction::new_with_payer(&[create_market], Some(&payer.pubkey()));
-        transaction.sign(&[&payer], recent_blockhash);
+        transaction.sign(&[&payer, &decision_authority], recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
         let market_account = banks_client.get_account(market_key).await.unwrap().unwrap();
@@ -542,8 +593,10 @@ mod test {
         let mut program_test =
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
+        let decision_authority = Keypair::new();
         let market = SearchMarketAccount {
-            best_result: None,
+            decision_authority: decision_authority.pubkey(),
+            best_result: undecided_result::id(),
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
@@ -562,7 +615,7 @@ mod test {
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction =
             Transaction::new_with_payer(&[create_market, create_result], Some(&payer.pubkey()));
-        transaction.sign(&[&payer], recent_blockhash);
+        transaction.sign(&[&payer, &decision_authority], recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
         let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
@@ -646,8 +699,10 @@ mod test {
         let mut program_test =
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
+        let decision_authority = Keypair::new();
         let market = SearchMarketAccount {
-            best_result: None,
+            decision_authority: decision_authority.pubkey(),
+            best_result: undecided_result::id(),
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
@@ -704,21 +759,24 @@ mod test {
             ],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[&payer, &deposit_keypair], recent_blockhash);
+        transaction.sign(
+            &[&payer, &decision_authority, &deposit_keypair],
+            recent_blockhash,
+        );
         banks_client.process_transaction(transaction).await.unwrap();
 
         let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
         assert_eq!(result_min_balance, result_account.lamports);
 
-        // let mint_authority_key =
-        //     Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], &program_id)
-        //         .unwrap();
-        // let mint_authority_account = banks_client
-        //     .get_account(mint_authority_key)
-        //     .await
-        //     .unwrap()
-        //     .unwrap();
-        // assert_eq!(mint_authority_account.lamports, 100);
+        let mint_authority_key =
+            Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], &program_id)
+                .unwrap();
+        let mint_authority_account = banks_client
+            .get_account(mint_authority_key)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(mint_authority_account.lamports, 100);
 
         let deposit_account = banks_client
             .get_account(deposit_keypair.pubkey())
@@ -750,8 +808,10 @@ mod test {
         let mut program_test =
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
+        let decision_authority = Keypair::new();
         let market = SearchMarketAccount {
-            best_result: None,
+            decision_authority: decision_authority.pubkey(),
+            best_result: undecided_result::id(),
             expires_slot: 0,
             search_string: "cyberpunk".to_string(),
         };
@@ -824,7 +884,10 @@ mod test {
             ],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[&payer, &deposit_keypair], recent_blockhash);
+        transaction.sign(
+            &[&payer, &decision_authority, &deposit_keypair],
+            recent_blockhash,
+        );
         banks_client.process_transaction(transaction).await.unwrap();
 
         let withdraw_min_balance = Rent::default().minimum_balance(0);
@@ -850,5 +913,71 @@ mod test {
             .unwrap();
         let no_token_data = Account::unpack_from_slice(&no_token_account.data).unwrap();
         assert_eq!(no_token_data.amount, 1);
+    }
+
+    #[tokio::test]
+    async fn test_decide() {
+        let program_id = crate::id();
+        let mut program_test =
+            ProgramTest::new("askbid", program_id, processor!(process_instruction));
+
+        let decision_authority = Keypair::new();
+        let mut market = SearchMarketAccount {
+            decision_authority: decision_authority.pubkey(),
+            best_result: undecided_result::id(),
+            expires_slot: 0,
+            search_string: "cyberpunk".to_string(),
+        };
+        let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
+
+        let mut result = ResultAccount {
+            search_market: market_key,
+            url: String::from("http://cyberpunk.net"),
+            name: String::from("Cyberpunk website"),
+            snippet: String::from("A game fated to be legend"),
+            yes_mint: Pubkey::new_unique(),
+            no_mint: Pubkey::new_unique(),
+            bump_seed: 0,
+        };
+        let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
+
+        let some_other_authority = Keypair::new();
+        let bad_decide_instruction = decide_instruction(
+            &program_id,
+            &market_key,
+            &some_other_authority.pubkey(),
+            &result_key,
+        )
+        .unwrap();
+
+        let good_decide_instruction = decide_instruction(
+            &program_id,
+            &market_key,
+            &decision_authority.pubkey(),
+            &result_key,
+        )
+        .unwrap();
+
+        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+
+        let mut transaction = Transaction::new_with_payer(
+            &[create_market.clone(), create_result.clone(), bad_decide_instruction],
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(&[&payer, &decision_authority, &some_other_authority], recent_blockhash);
+        banks_client.process_transaction(transaction).await.unwrap_err();
+
+        let mut transaction = Transaction::new_with_payer(
+            &[create_market, create_result, good_decide_instruction],
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(&[&payer, &decision_authority], recent_blockhash);
+        banks_client.process_transaction(transaction).await.unwrap();
+
+        market.best_result = result_key;
+        let market_account = banks_client.get_account(market_key).await.unwrap().unwrap();
+        let processed_market =
+            SearchMarketAccount::try_from_slice(&market_account.data[..]).unwrap();
+        assert_eq!(market, processed_market);
     }
 }
