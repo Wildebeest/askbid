@@ -109,7 +109,7 @@ pub fn deposit_instruction(
         AccountMeta::new(*deposit_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
-        AccountMeta::new_readonly(mint_authority_key, false),
+        AccountMeta::new(mint_authority_key, false),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
@@ -127,6 +127,7 @@ pub fn withdraw_instruction(
     program_id: &Pubkey,
     result_pubkey: &Pubkey,
     withdraw_pubkey: &Pubkey,
+    token_owner_pubkey: &Pubkey,
     yes_mint_pubkey: &Pubkey,
     yes_token_pubkey: &Pubkey,
     no_mint_pubkey: &Pubkey,
@@ -141,6 +142,8 @@ pub fn withdraw_instruction(
         AccountMeta::new(*withdraw_pubkey, false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
+        AccountMeta::new(mint_authority_key, false),
+        AccountMeta::new_readonly(*token_owner_pubkey, true),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
         AccountMeta::new(*no_mint_pubkey, false),
@@ -291,13 +294,14 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
 
     let result = ResultAccount::try_from_slice(&result_account_info.data.borrow())?;
 
-    invoke(
-        &transfer(deposit_account_info.key, result_account_info.key, amount),
+    invoke_signed(
+        &transfer(deposit_account_info.key, mint_authority_info.key, amount),
         &[
             deposit_account_info.clone(),
-            result_account_info.clone(),
+            mint_authority_info.clone(),
             system_program_info.clone(),
         ],
+        &[&[b"mint_authority", &[result.bump_seed]]],
     )?;
 
     invoke_signed(
@@ -345,19 +349,55 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     let withdraw_account_info = next_account_info(account_info_iter)?;
     let system_program_info = next_account_info(account_info_iter)?;
     let spl_token_program_info = next_account_info(account_info_iter)?;
+    let mint_authority_info = next_account_info(account_info_iter)?;
+    let token_owner_info = next_account_info(account_info_iter)?;
     let yes_mint_account_info = next_account_info(account_info_iter)?;
     let yes_token_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
     let no_token_account_info = next_account_info(account_info_iter)?;
 
     let result = ResultAccount::try_from_slice(&result_account_info.data.borrow())?;
-    
-    invoke(
-        &transfer(result_account_info.key, withdraw_account_info.key, amount),
+    invoke_signed(
+        &transfer(mint_authority_info.key, withdraw_account_info.key, amount),
         &[
-            result_account_info.clone(),
+            mint_authority_info.clone(),
             withdraw_account_info.clone(),
             system_program_info.clone(),
+        ],
+        &[&[b"mint_authority", &[result.bump_seed]]],
+    )?;
+
+    invoke(
+        &spl_token::instruction::burn(
+            spl_token_program_info.key,
+            yes_token_account_info.key,
+            yes_mint_account_info.key,
+            token_owner_info.key,
+            &[],
+            amount,
+        )?,
+        &[
+            yes_token_account_info.clone(),
+            yes_mint_account_info.clone(),
+            token_owner_info.clone(),
+            spl_token_program_info.clone(),
+        ],
+    )?;
+
+    invoke(
+        &spl_token::instruction::burn(
+            spl_token_program_info.key,
+            no_token_account_info.key,
+            no_mint_account_info.key,
+            token_owner_info.key,
+            &[],
+            amount,
+        )?,
+        &[
+            no_token_account_info.clone(),
+            no_mint_account_info.clone(),
+            token_owner_info.clone(),
+            spl_token_program_info.clone(),
         ],
     )?;
 
@@ -668,14 +708,23 @@ mod test {
         banks_client.process_transaction(transaction).await.unwrap();
 
         let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
+        assert_eq!(result_min_balance, result_account.lamports);
+
+        // let mint_authority_key =
+        //     Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], &program_id)
+        //         .unwrap();
+        // let mint_authority_account = banks_client
+        //     .get_account(mint_authority_key)
+        //     .await
+        //     .unwrap()
+        //     .unwrap();
+        // assert_eq!(mint_authority_account.lamports, 100);
 
         let deposit_account = banks_client
             .get_account(deposit_keypair.pubkey())
             .await
             .unwrap()
             .unwrap();
-
-        assert_eq!(result_min_balance + 100, result_account.lamports);
         assert_eq!(deposit_min_balance, deposit_account.lamports);
 
         let yes_token_account = banks_client
@@ -718,7 +767,6 @@ mod test {
             bump_seed: 0,
         };
         let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
-        let result_min_balance = minimum_balance(&result).unwrap();
 
         let deposit_keypair = Keypair::new();
         let (yes_token_pubkey, init_yes_token) = setup_token(
@@ -747,10 +795,14 @@ mod test {
         );
 
         let withdraw_keypair = Keypair::new();
+        let withdraw_account =
+            SolanaAccount::new(Rent::default().minimum_balance(0), 0, &system_program::id());
+        program_test.add_account(withdraw_keypair.pubkey(), withdraw_account);
         let withdraw_instruction = withdraw_instruction(
             &program_id,
             &result_key,
             &withdraw_keypair.pubkey(),
+            &deposit_keypair.pubkey(),
             &result.yes_mint,
             &yes_token_pubkey,
             &result.no_mint,
@@ -774,9 +826,6 @@ mod test {
         );
         transaction.sign(&[&payer, &deposit_keypair], recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
-
-        let result_account = banks_client.get_account(result_key).await.unwrap().unwrap();
-        assert_eq!(result_min_balance + 1, result_account.lamports);
 
         let withdraw_min_balance = Rent::default().minimum_balance(0);
         let withdraw_account = banks_client
