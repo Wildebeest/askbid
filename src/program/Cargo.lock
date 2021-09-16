@@ -1611,6 +1611,7 @@ dependencies = [
  "spl-token",
  "thiserror",
  "tokio",
+ "url",
 ]
 
 [[package]]
