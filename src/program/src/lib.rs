@@ -51,7 +51,7 @@ pub fn create_market_instruction(
     .try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*market_pubkey, false),
-        AccountMeta::new(*decision_pubkey, true),
+        AccountMeta::new_readonly(*decision_pubkey, true),
     ];
     Ok(Instruction {
         program_id: *program_id,
@@ -109,7 +109,7 @@ pub fn deposit_instruction(
         Pubkey::find_program_address(&[b"mint_authority"], program_id);
     let data = SearchMarketInstruction::Deposit { amount }.try_to_vec()?;
     let accounts = vec![
-        AccountMeta::new(*result_pubkey, false),
+        AccountMeta::new_readonly(*result_pubkey, false),
         AccountMeta::new(*deposit_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
@@ -142,11 +142,11 @@ pub fn withdraw_instruction(
         Pubkey::find_program_address(&[b"mint_authority"], program_id);
     let data = SearchMarketInstruction::Withdraw { amount }.try_to_vec()?;
     let accounts = vec![
-        AccountMeta::new(*result_pubkey, false),
+        AccountMeta::new_readonly(*result_pubkey, false),
         AccountMeta::new(*withdraw_pubkey, false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
-        AccountMeta::new(mint_authority_key, false),
+        AccountMeta::new_readonly(mint_authority_key, false),
         AccountMeta::new_readonly(*token_owner_pubkey, true),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
@@ -171,7 +171,7 @@ pub fn decide_instruction(
     let accounts = vec![
         AccountMeta::new(*market_pubkey, false),
         AccountMeta::new_readonly(*decision_authority_pubkey, true),
-        AccountMeta::new(*best_result_pubkey, false),
+        AccountMeta::new_readonly(*best_result_pubkey, false),
     ];
     Ok(Instruction {
         program_id: *program_id,
