@@ -144,7 +144,7 @@ pub fn withdraw_instruction(
     let data = SearchMarketInstruction::Withdraw { amount }.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new_readonly(*result_pubkey, false),
-        AccountMeta::new(*withdraw_pubkey, false),
+        AccountMeta::new(*withdraw_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new_readonly(mint_authority_key, false),
@@ -442,7 +442,35 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     let no_mint_account_info = next_account_info(account_info_iter)?;
     let no_token_account_info = next_account_info(account_info_iter)?;
 
+    if *result_account_info.owner != *program_id {
+        return Err(ProgramError::InvalidAccountData);
+    }
     let result = ResultAccount::try_from_slice(&result_account_info.data.borrow())?;
+
+    if !withdraw_account_info.is_signer {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *system_program_info.key != system_program::id() {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *spl_token_program_info.key != spl_token::id() {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], program_id)? != *mint_authority_info.key {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *yes_mint_account_info.key != result.yes_mint {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *no_mint_account_info.key != result.no_mint {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     invoke_signed(
         &transfer(mint_authority_info.key, withdraw_account_info.key, amount),
         &[
@@ -497,8 +525,23 @@ pub fn decide(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let best_result_info = next_account_info(account_info_iter)?;
     let clock = Clock::get()?;
 
+    if *market_account_info.owner != *program_id {
+        return Err(ProgramError::InvalidAccountData);
+    }
     let mut market =
         SearchMarketAccount::try_from_slice(&market_account_info.data.borrow()).unwrap();
+
+    if !decision_authority_info.is_signer {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *best_result_info.owner != *program_id {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    let result = ResultAccount::try_from_slice(&best_result_info.data.borrow())?;
+    if result.search_market != *market_account_info.key {
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     if clock.slot > market.expires_slot {
         return Err(ProgramError::InvalidAccountData);
@@ -956,7 +999,7 @@ mod test {
             Some(&payer.pubkey()),
         );
         transaction.sign(
-            &[&payer, &decision_authority, &deposit_keypair],
+            &[&payer, &decision_authority, &deposit_keypair, &withdraw_keypair],
             recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.unwrap();
