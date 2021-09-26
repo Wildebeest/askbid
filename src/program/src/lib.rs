@@ -98,6 +98,7 @@ pub fn create_result_instruction(
 
 pub fn deposit_instruction(
     program_id: &Pubkey,
+    market_pubkey: &Pubkey,
     result_pubkey: &Pubkey,
     deposit_pubkey: &Pubkey,
     yes_mint_pubkey: &Pubkey,
@@ -110,6 +111,7 @@ pub fn deposit_instruction(
         Pubkey::find_program_address(&[b"mint_authority"], program_id);
     let data = SearchMarketInstruction::Deposit { amount }.try_to_vec()?;
     let accounts = vec![
+        AccountMeta::new_readonly(*market_pubkey, false),
         AccountMeta::new_readonly(*result_pubkey, false),
         AccountMeta::new(*deposit_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
@@ -130,6 +132,7 @@ pub fn deposit_instruction(
 
 pub fn withdraw_instruction(
     program_id: &Pubkey,
+    market_pubkey: &Pubkey,
     result_pubkey: &Pubkey,
     withdraw_pubkey: &Pubkey,
     token_owner_pubkey: &Pubkey,
@@ -143,6 +146,7 @@ pub fn withdraw_instruction(
         Pubkey::find_program_address(&[b"mint_authority"], program_id);
     let data = SearchMarketInstruction::Withdraw { amount }.try_to_vec()?;
     let accounts = vec![
+        AccountMeta::new_readonly(*market_pubkey, false),
         AccountMeta::new_readonly(*result_pubkey, false),
         AccountMeta::new(*withdraw_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
@@ -289,11 +293,11 @@ pub fn create_result(
     }
 
     if *rent_account_info.key != rent::id() {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     if *spl_token_account_info.key != spl_token::id() {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     invoke(
@@ -343,6 +347,7 @@ pub fn create_result(
 
 pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
+    let market_account_info = next_account_info(account_info_iter)?;
     let result_account_info = next_account_info(account_info_iter)?;
     let deposit_account_info = next_account_info(account_info_iter)?;
     let system_program_info = next_account_info(account_info_iter)?;
@@ -352,18 +357,30 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     let yes_token_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
     let no_token_account_info = next_account_info(account_info_iter)?;
+    let clock = Clock::get()?;
+
+    if *market_account_info.owner != *program_id {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    let market = SearchMarketAccount::try_from_slice(*market_account_info.data.borrow())?;
+    if clock.slot > market.expires_slot {
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     if *result_account_info.owner != *program_id {
         return Err(ProgramError::InvalidAccountData);
     }
     let result = ResultAccount::try_from_slice(&result_account_info.data.borrow())?;
+    if result.search_market != *market_account_info.key {
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     if *system_program_info.key != system_program::id() {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     if *spl_token_program_info.key != spl_token::id() {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     if Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], program_id)?
@@ -373,11 +390,11 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     }
 
     if *yes_mint_account_info.key != result.yes_mint {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     if *no_mint_account_info.key != result.no_mint {
-        return Err(ProgramError::InvalidAccountData)
+        return Err(ProgramError::InvalidAccountData);
     }
 
     invoke_signed(
@@ -431,6 +448,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
 
 pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
+    let market_account_info = next_account_info(account_info_iter)?;
     let result_account_info = next_account_info(account_info_iter)?;
     let withdraw_account_info = next_account_info(account_info_iter)?;
     let system_program_info = next_account_info(account_info_iter)?;
@@ -441,6 +459,12 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     let yes_token_account_info = next_account_info(account_info_iter)?;
     let no_mint_account_info = next_account_info(account_info_iter)?;
     let no_token_account_info = next_account_info(account_info_iter)?;
+    let clock = Clock::get()?;
+
+    if *market_account_info.owner != *program_id {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    let market = SearchMarketAccount::try_from_slice(*market_account_info.data.borrow())?;
 
     if *result_account_info.owner != *program_id {
         return Err(ProgramError::InvalidAccountData);
@@ -459,7 +483,9 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], program_id)? != *mint_authority_info.key {
+    if Pubkey::create_program_address(&[b"mint_authority", &[result.bump_seed]], program_id)?
+        != *mint_authority_info.key
+    {
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -471,8 +497,24 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         return Err(ProgramError::InvalidAccountData);
     }
 
+    let mut withdraw_amount = amount;
+    let mut yes_amount = 0;
+    let mut no_amount = 0;
+    if market.best_result == undecided_result::id() {
+        yes_amount = amount;
+        no_amount = amount;
+    } else if market.best_result == *result_account_info.key {
+        yes_amount = amount;
+    } else {
+        no_amount = amount;
+    }
+
     invoke_signed(
-        &transfer(mint_authority_info.key, withdraw_account_info.key, amount),
+        &transfer(
+            mint_authority_info.key,
+            withdraw_account_info.key,
+            withdraw_amount,
+        ),
         &[
             mint_authority_info.clone(),
             withdraw_account_info.clone(),
@@ -481,39 +523,43 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         &[&[b"mint_authority", &[result.bump_seed]]],
     )?;
 
-    invoke(
-        &spl_token::instruction::burn(
-            spl_token_program_info.key,
-            yes_token_account_info.key,
-            yes_mint_account_info.key,
-            token_owner_info.key,
-            &[],
-            amount,
-        )?,
-        &[
-            yes_token_account_info.clone(),
-            yes_mint_account_info.clone(),
-            token_owner_info.clone(),
-            spl_token_program_info.clone(),
-        ],
-    )?;
+    if yes_amount > 0 {
+        invoke(
+            &spl_token::instruction::burn(
+                spl_token_program_info.key,
+                yes_token_account_info.key,
+                yes_mint_account_info.key,
+                token_owner_info.key,
+                &[],
+                yes_amount,
+            )?,
+            &[
+                yes_token_account_info.clone(),
+                yes_mint_account_info.clone(),
+                token_owner_info.clone(),
+                spl_token_program_info.clone(),
+            ],
+        )?;
+    }
 
-    invoke(
-        &spl_token::instruction::burn(
-            spl_token_program_info.key,
-            no_token_account_info.key,
-            no_mint_account_info.key,
-            token_owner_info.key,
-            &[],
-            amount,
-        )?,
-        &[
-            no_token_account_info.clone(),
-            no_mint_account_info.clone(),
-            token_owner_info.clone(),
-            spl_token_program_info.clone(),
-        ],
-    )?;
+    if no_amount > 0 {
+        invoke(
+            &spl_token::instruction::burn(
+                spl_token_program_info.key,
+                no_token_account_info.key,
+                no_mint_account_info.key,
+                token_owner_info.key,
+                &[],
+                amount,
+            )?,
+            &[
+                no_token_account_info.clone(),
+                no_mint_account_info.clone(),
+                token_owner_info.clone(),
+                spl_token_program_info.clone(),
+            ],
+        )?;
+    }
 
     Ok(())
 }
@@ -780,6 +826,7 @@ mod test {
     fn setup_deposit(
         deposit_key: &Pubkey,
         amount: u64,
+        market_key: &Pubkey,
         result_key: &Pubkey,
         result: &ResultAccount,
         yes_token_pubkey: &Pubkey,
@@ -794,6 +841,7 @@ mod test {
 
         let deposit_instruction = deposit_instruction(
             &program_id,
+            &market_key,
             &result_key,
             &deposit_key,
             &result.yes_mint,
@@ -853,6 +901,7 @@ mod test {
         let deposit_instruction = setup_deposit(
             &deposit_keypair.pubkey(),
             100,
+            &market_key,
             &result_key,
             &result,
             &yes_token_pubkey,
@@ -960,6 +1009,7 @@ mod test {
         let deposit_instruction = setup_deposit(
             &deposit_keypair.pubkey(),
             100,
+            &market_key,
             &result_key,
             &result,
             &yes_token_pubkey,
@@ -974,6 +1024,7 @@ mod test {
         program_test.add_account(withdraw_keypair.pubkey(), withdraw_account);
         let withdraw_instruction = withdraw_instruction(
             &program_id,
+            &market_key,
             &result_key,
             &withdraw_keypair.pubkey(),
             &deposit_keypair.pubkey(),
@@ -999,7 +1050,12 @@ mod test {
             Some(&payer.pubkey()),
         );
         transaction.sign(
-            &[&payer, &decision_authority, &deposit_keypair, &withdraw_keypair],
+            &[
+                &payer,
+                &decision_authority,
+                &deposit_keypair,
+                &withdraw_keypair,
+            ],
             recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.unwrap();
