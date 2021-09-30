@@ -177,101 +177,140 @@ pub mod test {
     use crate::ResultAccount;
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
+    use solana_sdk::transaction::TransactionError::InstructionError;
+    use solana_sdk::transport::TransportError;
     use solana_sdk::{
         account::Account as SolanaAccount,
         rent::Rent,
         signature::{Keypair, Signer},
         transaction::Transaction,
+        transport,
     };
-    use spl_token::state::Account;
+    use spl_token::{instruction, state::Account};
+
+    struct WithdrawTest {
+        program_id: Pubkey,
+        program_test: ProgramTest,
+        decision_authority: Keypair,
+        market_key: Pubkey,
+        market: SearchMarketAccount,
+        result_key: Pubkey,
+        result: ResultAccount,
+        yes_token_pubkey: Pubkey,
+        no_token_pubkey: Pubkey,
+        deposit_keypair: Keypair,
+        instructions: Vec<Instruction>,
+    }
+
+    impl WithdrawTest {
+        fn new() -> WithdrawTest {
+            let program_id = crate::id();
+            let mut program_test =
+                ProgramTest::new("askbid", program_id, processor!(process_instruction));
+
+            let decision_authority = Keypair::new();
+            let market = SearchMarketAccount {
+                decision_authority: decision_authority.pubkey(),
+                best_result: undecided_result::id(),
+                expires_slot: 1,
+                search_string: "cyberpunk".to_string(),
+            };
+            let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
+
+            let mut result = ResultAccount {
+                search_market: market_key,
+                url: String::from("http://cyberpunk.net"),
+                name: String::from("Cyberpunk website"),
+                snippet: String::from("A game fated to be legend"),
+                yes_mint: Pubkey::new_unique(),
+                no_mint: Pubkey::new_unique(),
+                bump_seed: 0,
+            };
+            let (result_key, create_result) =
+                setup_result(&mut result, &mut program_test, &program_id);
+
+            let deposit_keypair = Keypair::new();
+            let (yes_token_pubkey, init_yes_token) = setup_token(
+                &result.yes_mint,
+                &deposit_keypair.pubkey(),
+                &mut program_test,
+            );
+
+            let (no_token_pubkey, init_no_token) = setup_token(
+                &result.no_mint,
+                &deposit_keypair.pubkey(),
+                &mut program_test,
+            );
+
+            let deposit_instruction = setup_deposit(
+                &deposit_keypair.pubkey(),
+                100,
+                &market_key,
+                &result_key,
+                &result,
+                &yes_token_pubkey,
+                &no_token_pubkey,
+                &mut program_test,
+                &program_id,
+            );
+
+            WithdrawTest {
+                program_id,
+                program_test,
+                decision_authority,
+                market_key,
+                market,
+                result_key,
+                result,
+                yes_token_pubkey,
+                no_token_pubkey,
+                deposit_keypair,
+                instructions: vec![
+                    create_market,
+                    create_result,
+                    init_yes_token,
+                    init_no_token,
+                    deposit_instruction,
+                ],
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_withdraw() {
-        let program_id = crate::id();
-        let mut program_test =
-            ProgramTest::new("askbid", program_id, processor!(process_instruction));
-
-        let decision_authority = Keypair::new();
-        let market = SearchMarketAccount {
-            decision_authority: decision_authority.pubkey(),
-            best_result: undecided_result::id(),
-            expires_slot: 1,
-            search_string: "cyberpunk".to_string(),
-        };
-        let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
-
-        let mut result = ResultAccount {
-            search_market: market_key,
-            url: String::from("http://cyberpunk.net"),
-            name: String::from("Cyberpunk website"),
-            snippet: String::from("A game fated to be legend"),
-            yes_mint: Pubkey::new_unique(),
-            no_mint: Pubkey::new_unique(),
-            bump_seed: 0,
-        };
-        let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
-
-        let deposit_keypair = Keypair::new();
-        let (yes_token_pubkey, init_yes_token) = setup_token(
-            &result.yes_mint,
-            &deposit_keypair.pubkey(),
-            &mut program_test,
-        );
-
-        let (no_token_pubkey, init_no_token) = setup_token(
-            &result.no_mint,
-            &deposit_keypair.pubkey(),
-            &mut program_test,
-        );
-
-        let deposit_instruction = setup_deposit(
-            &deposit_keypair.pubkey(),
-            100,
-            &market_key,
-            &result_key,
-            &result,
-            &yes_token_pubkey,
-            &no_token_pubkey,
-            &mut program_test,
-            &program_id,
-        );
+        let mut withdraw_test = WithdrawTest::new();
 
         let withdraw_keypair = Keypair::new();
         let withdraw_account =
             SolanaAccount::new(Rent::default().minimum_balance(0), 0, &system_program::id());
-        program_test.add_account(withdraw_keypair.pubkey(), withdraw_account);
+        withdraw_test
+            .program_test
+            .add_account(withdraw_keypair.pubkey(), withdraw_account);
         let withdraw_instruction = withdraw_instruction(
-            &program_id,
-            &market_key,
-            &result_key,
+            &withdraw_test.program_id,
+            &withdraw_test.market_key,
+            &withdraw_test.result_key,
             &withdraw_keypair.pubkey(),
-            &deposit_keypair.pubkey(),
-            &result.yes_mint,
-            &yes_token_pubkey,
-            &result.no_mint,
-            &no_token_pubkey,
+            &withdraw_test.deposit_keypair.pubkey(),
+            &withdraw_test.result.yes_mint,
+            &withdraw_test.yes_token_pubkey,
+            &withdraw_test.result.no_mint,
+            &withdraw_test.no_token_pubkey,
             99,
         )
         .unwrap();
 
-        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+        let (mut banks_client, payer, recent_blockhash) = withdraw_test.program_test.start().await;
 
         let mut transaction = Transaction::new_with_payer(
-            &[
-                create_market,
-                create_result,
-                init_yes_token,
-                init_no_token,
-                deposit_instruction,
-                withdraw_instruction,
-            ],
+            &[withdraw_test.instructions, vec![withdraw_instruction]].concat(),
             Some(&payer.pubkey()),
         );
         transaction.sign(
             &[
                 &payer,
-                &decision_authority,
-                &deposit_keypair,
+                &withdraw_test.decision_authority,
+                &withdraw_test.deposit_keypair,
                 &withdraw_keypair,
             ],
             recent_blockhash,
@@ -287,7 +326,7 @@ pub mod test {
         assert_eq!(withdraw_min_balance + 99, withdraw_account.lamports);
 
         let yes_token_account = banks_client
-            .get_account(yes_token_pubkey)
+            .get_account(withdraw_test.yes_token_pubkey)
             .await
             .unwrap()
             .unwrap();
@@ -295,11 +334,121 @@ pub mod test {
         assert_eq!(yes_token_data.amount, 1);
 
         let no_token_account = banks_client
-            .get_account(no_token_pubkey)
+            .get_account(withdraw_test.no_token_pubkey)
             .await
             .unwrap()
             .unwrap();
         let no_token_data = Account::unpack_from_slice(&no_token_account.data).unwrap();
         assert_eq!(no_token_data.amount, 1);
+    }
+
+    #[tokio::test]
+    async fn test_needed_no_withdraw() {
+        let mut withdraw_test = WithdrawTest::new();
+
+        let (empty_no_token_pubkey, init_empty_no_token) = setup_token(
+            &withdraw_test.result.no_mint,
+            &withdraw_test.deposit_keypair.pubkey(),
+            &mut withdraw_test.program_test,
+        );
+
+        let withdraw_keypair = Keypair::new();
+        let withdraw_account =
+            SolanaAccount::new(Rent::default().minimum_balance(0), 0, &system_program::id());
+        withdraw_test
+            .program_test
+            .add_account(withdraw_keypair.pubkey(), withdraw_account);
+        let withdraw_instruction = withdraw_instruction(
+            &withdraw_test.program_id,
+            &withdraw_test.market_key,
+            &withdraw_test.result_key,
+            &withdraw_keypair.pubkey(),
+            &withdraw_test.deposit_keypair.pubkey(),
+            &withdraw_test.result.yes_mint,
+            &withdraw_test.yes_token_pubkey,
+            &withdraw_test.result.no_mint,
+            &empty_no_token_pubkey,
+            99,
+        )
+        .unwrap();
+
+        let (mut banks_client, payer, recent_blockhash) = withdraw_test.program_test.start().await;
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                withdraw_test.instructions,
+                vec![init_empty_no_token, withdraw_instruction],
+            ]
+            .concat(),
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(
+            &[
+                &payer,
+                &withdraw_test.decision_authority,
+                &withdraw_test.deposit_keypair,
+                &withdraw_keypair,
+            ],
+            recent_blockhash,
+        );
+        banks_client
+            .process_transaction(transaction)
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_needed_yes_withdraw() {
+        let mut withdraw_test = WithdrawTest::new();
+
+        let (empty_yes_token_pubkey, init_empty_yes_token) = setup_token(
+            &withdraw_test.result.yes_mint,
+            &withdraw_test.deposit_keypair.pubkey(),
+            &mut withdraw_test.program_test,
+        );
+
+        let withdraw_keypair = Keypair::new();
+        let withdraw_account =
+            SolanaAccount::new(Rent::default().minimum_balance(0), 0, &system_program::id());
+        withdraw_test
+            .program_test
+            .add_account(withdraw_keypair.pubkey(), withdraw_account);
+        let withdraw_instruction = withdraw_instruction(
+            &withdraw_test.program_id,
+            &withdraw_test.market_key,
+            &withdraw_test.result_key,
+            &withdraw_keypair.pubkey(),
+            &withdraw_test.deposit_keypair.pubkey(),
+            &withdraw_test.result.yes_mint,
+            &empty_yes_token_pubkey,
+            &withdraw_test.result.no_mint,
+            &withdraw_test.no_token_pubkey,
+            99,
+        )
+            .unwrap();
+
+        let (mut banks_client, payer, recent_blockhash) = withdraw_test.program_test.start().await;
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                withdraw_test.instructions,
+                vec![init_empty_yes_token, withdraw_instruction],
+            ]
+                .concat(),
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(
+            &[
+                &payer,
+                &withdraw_test.decision_authority,
+                &withdraw_test.deposit_keypair,
+                &withdraw_keypair,
+            ],
+            recent_blockhash,
+        );
+        banks_client
+            .process_transaction(transaction)
+            .await
+            .unwrap_err();
     }
 }
