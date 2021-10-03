@@ -1,21 +1,28 @@
-import Head from 'next/head'
+import Head from 'next/head';
+import { useState, useEffect } from "react";
 
 export default function Home() {
+    const [isConnected, setConnected] = useState<boolean>(false);
+
+    const submitSearch = event => {
+        event.preventDefault();
+
+    };
     return (
-        <div className="container">
+        <div>
             <Head>
-                <title>Create Next App</title>
-                <link rel="icon" href="/favicon.ico" />
+                <title>🚀 AskBid 🔎</title>
+                <link rel="icon" href="/favicon.ico"/>
             </Head>
 
             <main>
-                <form method="post" className="flex justify-center pt-20">
+                <form onSubmit={submitSearch} className="flex justify-center pt-20">
                     <div>
                         <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Exchange 🌚</h1>
 
                         <div className="flex border border-gray-200 rounded p-4 shadow text-xl">
                             <div>🔎</div>
-                            <input type="text" className="w-full outline-none px-3" name="query" required />
+                            <input type="text" className="w-full outline-none px-3" name="query" required/>
                             <div>🇺🇸</div>
                         </div>
 
@@ -27,6 +34,7 @@ export default function Home() {
                         </div>
                     </div>
                 </form>
+
             </main>
         </div>
     )
