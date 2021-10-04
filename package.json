@@ -16,6 +16,8 @@
     "@types/node": "^16.6.1",
     "@types/react": "^17.0.25",
     "autoprefixer": "^10.3.6",
+    "eslint": "^7.32.0",
+    "eslint-plugin-react": "^7.26.1",
     "postcss": "^8.3.8",
     "tailwindcss": "^2.2.16",
     "ts-node": "^10.2.0",
