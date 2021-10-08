@@ -36,7 +36,6 @@ function Result(props: {result: ResultAccount}) {
 
 export default function Results() {
     const router = useRouter();
-    const connection = new Connection("http://127.0.0.1:8899", 'confirmed');
     const [searchMarket, setSearchMarket] = useState<SearchMarketAccount>();
     const [query, setQuery] = useState<string>("");
     const [resultAccounts, setResultAccounts] = useState<Map<string, { pubkey: PublicKey, account: ResultAccount }>>(new Map());
@@ -46,6 +45,7 @@ export default function Results() {
     };
 
     useEffect(() => {
+        const connection = new Connection("http://127.0.0.1:8899", 'confirmed');
         (async () => {
             const {marketId} = router.query;
             if (!marketId) {
@@ -72,7 +72,7 @@ export default function Results() {
             resultAccounts.forEach((v, k) => newResultAccounts.set(k, v));
             setResultAccounts(newResultAccounts);
         })();
-    }, [router]);
+    }, [router, resultAccounts]);
     return (
         <div>
             <Head>

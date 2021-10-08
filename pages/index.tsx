@@ -73,7 +73,7 @@ function WalletButton(props) {
             props.setConnected(true);
         });
         provider.connect({onlyIfTrusted: true});
-    }, [provider]);
+    }, [provider, props]);
 
     const onClick = () => {
         provider.connect();
