@@ -72,7 +72,7 @@ export default function Results() {
             resultAccounts.forEach((v, k) => newResultAccounts.set(k, v));
             setResultAccounts(newResultAccounts);
         })();
-    }, [router, resultAccounts]);
+    }, [router]);
     return (
         <div>
             <Head>
