@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "start": "next start",
-    "build": "cargo build-bpf --manifest-path=./src/program/Cargo.toml --bpf-out-dir=dist/program",
+    "build": "cargo build-bpf --manifest-path=./program/Cargo.toml --bpf-out-dir=dist/program",
     "deploy": "solana program deploy dist/program/askbid.so"
   },
   "devDependencies": {
