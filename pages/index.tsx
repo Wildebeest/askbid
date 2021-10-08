@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import {useRouter} from 'next/router';
 import {useState, useEffect} from "react";
 import {
     Connection,
@@ -9,6 +10,14 @@ import {
     PublicKey,
 } from "@solana/web3.js";
 import * as borsh from 'borsh';
+import {
+    PROGRAM_ID,
+    Instruction,
+    InstructionSchema,
+    CreateMarket,
+    SearchMarketAccountSchema,
+    SearchMarketAccount
+} from "../lib/client";
 
 function SearchButton(props) {
     let hoverStates = "opacity-50";
@@ -79,70 +88,11 @@ function WalletButton(props) {
     );
 }
 
-const PROGRAM_ID = new PublicKey("CtRJbPMscDFRJptvh6snF5GJXDNCJHMFsfYoczds37AV");
-
-class Instruction {
-    CreateMarket: CreateMarket;
-    instruction: string;
-
-    constructor(fields) {
-        this.CreateMarket = fields.CreateMarket;
-        this.instruction = fields.instruction;
-    }
-}
-
-class CreateMarket {
-    expires_slot: number;
-    search_string: string;
-
-    constructor(expires_slot, search_string) {
-        this.expires_slot = expires_slot;
-        this.search_string = search_string;
-    }
-}
-
-const InstructionWrapperSchema = [Instruction, {
-    kind: 'enum',
-    field: 'instruction',
-    values: [['CreateMarket', {}]]
-}];
-const CreateMarketSchema = [CreateMarket, {
-    kind: 'struct',
-    fields: [['expires_slot', 'u64'], ['search_string', 'string']]
-}];
-
-class SearchMarketAccount {
-    decision_authority: Uint8Array;
-    search_string: string;
-    best_result: Uint8Array;
-    expires_slot: number;
-
-    constructor(fields: { decision_authority: PublicKey, search_string: string, best_result: PublicKey, expires_slot: number }) {
-        this.decision_authority = fields.decision_authority.toBytes();
-        this.search_string = fields.search_string;
-        this.best_result = fields.best_result.toBytes();
-        this.expires_slot = fields.expires_slot;
-    }
-}
-
-const SearchMarketAccountSchema: borsh.Schema = new Map([[SearchMarketAccount, {
-    kind: 'struct',
-    fields: [
-        ['decision_authority', [32]],
-        ['search_string', 'string'],
-        ['best_result', [32]],
-        ['expires_slot', 'u64']],
-}]]);
-
-// @ts-ignore
-const InstructionSchema: borsh.Schema = new Map([
-    InstructionWrapperSchema,
-    CreateMarketSchema]);
-
 export default function Home() {
     const [isConnected, setConnected] = useState<boolean>(false);
     const [query, setQuery] = useState<string>("");
     const connection = new Connection("http://127.0.0.1:8899", 'confirmed');
+    const router = useRouter();
 
     const onQueryChange = event => {
         setQuery(event.target.value);
@@ -157,10 +107,10 @@ export default function Home() {
             CreateMarket: new CreateMarket(slot, query),
         }));
         const searchMarketAccount = new SearchMarketAccount({
-            decision_authority: provider.publicKey,
+            decision_authority: provider.publicKey.toBytes(),
             search_string: query,
             expires_slot: slot,
-            best_result: PublicKey.default
+            best_result: PublicKey.default.toBytes()
         });
         const accountSize = borsh.serialize(SearchMarketAccountSchema, searchMarketAccount).byteLength;
         const rentExemptAmount = await connection.getMinimumBalanceForRentExemption(accountSize);
@@ -195,7 +145,7 @@ export default function Home() {
         const signedTransaction = await provider.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signedTransaction.serialize());
         await connection.confirmTransaction(signature);
-        console.log(`Created new account ${marketAccountKey.publicKey}`);
+        await router.push(`/results/${marketAccountKey.publicKey}`);
     };
     return (
         <div>
