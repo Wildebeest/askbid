@@ -13,7 +13,7 @@ mod test_utils;
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum SearchMarketError {}
 
-solana_program::declare_id!("My11111111111111111111111111111111111111111");
+solana_program::declare_id!("CtRJbPMscDFRJptvh6snF5GJXDNCJHMFsfYoczds37AV");
 entrypoint!(process_instruction);
 
 // Program entrypoint's implementation
