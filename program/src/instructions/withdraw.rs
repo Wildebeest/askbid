@@ -101,7 +101,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let mut withdraw_amount = amount;
+    let withdraw_amount = amount;
     let mut yes_amount = 0;
     let mut no_amount = 0;
     if market.best_result == undecided_result::id() {
@@ -177,16 +177,13 @@ pub mod test {
     use crate::ResultAccount;
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
-    use solana_sdk::transaction::TransactionError::InstructionError;
-    use solana_sdk::transport::TransportError;
     use solana_sdk::{
         account::Account as SolanaAccount,
         rent::Rent,
         signature::{Keypair, Signer},
         transaction::Transaction,
-        transport,
     };
-    use spl_token::{instruction, state::Account};
+    use spl_token::state::Account;
 
     struct WithdrawTest {
         program_id: Pubkey,
@@ -425,7 +422,7 @@ pub mod test {
             &withdraw_test.no_token_pubkey,
             99,
         )
-            .unwrap();
+        .unwrap();
 
         let (mut banks_client, payer, recent_blockhash) = withdraw_test.program_test.start().await;
 
@@ -434,7 +431,7 @@ pub mod test {
                 withdraw_test.instructions,
                 vec![init_empty_yes_token, withdraw_instruction],
             ]
-                .concat(),
+            .concat(),
             Some(&payer.pubkey()),
         );
         transaction.sign(

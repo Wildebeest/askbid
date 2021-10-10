@@ -11,6 +11,8 @@ mod withdraw;
 pub use withdraw::{withdraw, withdraw_instruction};
 mod decide;
 pub use decide::{decide, decide_instruction};
+mod create_order;
+pub use create_order::{create_order, create_order_instruction, OrderAccount, OrderSide};
 
 #[cfg(test)]
 pub mod test_utils {
@@ -41,4 +43,12 @@ pub enum SearchMarketInstruction {
         amount: u64,
     },
     Decide,
+    CreateOrder {
+        side: OrderSide,
+        price: u64,
+        quantity: u64,
+        escrow_bump_seed: u8,
+    },
+    FillOrder,
+    CancelOrder,
 }

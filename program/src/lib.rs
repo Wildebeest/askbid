@@ -1,6 +1,6 @@
 use borsh::BorshDeserialize;
 use solana_program::{
-    account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, msg, pubkey::Pubkey,
 };
 use thiserror::Error;
 mod instructions;
@@ -23,6 +23,7 @@ pub fn process_instruction(
     input: &[u8],        // Ignored, all helloworld instructions are hellos
 ) -> ProgramResult {
     let instruction = SearchMarketInstruction::try_from_slice(input)?;
+    msg!("Instruction: {:?}", instruction);
     match instruction {
         SearchMarketInstruction::CreateMarket {
             expires_slot,
@@ -37,5 +38,19 @@ pub fn process_instruction(
         SearchMarketInstruction::Deposit { amount } => deposit(program_id, accounts, amount),
         SearchMarketInstruction::Withdraw { amount } => withdraw(program_id, accounts, amount),
         SearchMarketInstruction::Decide => decide(program_id, accounts),
+        SearchMarketInstruction::CreateOrder {
+            side,
+            price,
+            quantity,
+            escrow_bump_seed,
+        } => create_order(
+            program_id,
+            accounts,
+            side,
+            price,
+            quantity,
+            escrow_bump_seed,
+        ),
+        _ => Ok(()),
     }
 }
