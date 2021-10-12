@@ -15,6 +15,8 @@ mod create_order;
 pub use create_order::{create_order, create_order_instruction, OrderAccount, OrderSide};
 mod fill_order;
 pub use fill_order::{fill_order, fill_order_instruction};
+mod cancel_order;
+pub use cancel_order::{cancel_order, cancel_order_instruction};
 
 #[cfg(test)]
 pub mod test_utils {

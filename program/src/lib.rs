@@ -60,6 +60,7 @@ pub fn process_instruction(
             sol_escrow_bump_seed,
             token_escrow_bump_seed,
         ),
-        _ => Ok(()),
+        SearchMarketInstruction::CancelOrder =>
+            cancel_order(program_id, accounts)
     }
 }
