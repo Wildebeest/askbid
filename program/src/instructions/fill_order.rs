@@ -2,14 +2,12 @@ use super::{OrderAccount, OrderSide, SearchMarketInstruction};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Clock,
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
-    program::{invoke, invoke_signed},
+    program::invoke_signed,
     program_error::ProgramError,
     pubkey::Pubkey,
     system_instruction, system_program,
-    sysvar::{rent, Sysvar},
 };
 
 pub fn fill_order_instruction(
@@ -162,7 +160,6 @@ pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;
     use crate::process_instruction;
-    use crate::test_utils::*;
     use crate::{undecided_result, ResultAccount, SearchMarketAccount};
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
@@ -172,7 +169,6 @@ pub mod test {
         signature::{Keypair, Signer},
         transaction::Transaction,
     };
-    use spl_token::state::Account;
 
     #[tokio::test]
     async fn test_fill_order() {
