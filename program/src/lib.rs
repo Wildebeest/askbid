@@ -51,6 +51,15 @@ pub fn process_instruction(
             quantity,
             escrow_bump_seed,
         ),
+        SearchMarketInstruction::FillOrder {
+            sol_escrow_bump_seed,
+            token_escrow_bump_seed,
+        } => fill_order(
+            program_id,
+            accounts,
+            sol_escrow_bump_seed,
+            token_escrow_bump_seed,
+        ),
         _ => Ok(()),
     }
 }

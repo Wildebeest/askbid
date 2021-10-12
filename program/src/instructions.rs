@@ -13,6 +13,8 @@ mod decide;
 pub use decide::{decide, decide_instruction};
 mod create_order;
 pub use create_order::{create_order, create_order_instruction, OrderAccount, OrderSide};
+mod fill_order;
+pub use fill_order::{fill_order, fill_order_instruction};
 
 #[cfg(test)]
 pub mod test_utils {
@@ -21,6 +23,7 @@ pub mod test_utils {
     pub use super::decide::test::*;
     pub use super::deposit::test::*;
     pub use super::withdraw::test::*;
+    pub use super::create_order::test::*;
 }
 
 #[repr(C)]
@@ -49,6 +52,9 @@ pub enum SearchMarketInstruction {
         quantity: u64,
         escrow_bump_seed: u8,
     },
-    FillOrder,
+    FillOrder {
+        sol_escrow_bump_seed: u8,
+        token_escrow_bump_seed: u8,
+    },
     CancelOrder,
 }

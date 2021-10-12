@@ -2,14 +2,13 @@ use super::{SearchMarketAccount, SearchMarketInstruction};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Clock,
+    clock::{Clock, Slot},
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     program::invoke,
     program_error::ProgramError,
     pubkey::Pubkey,
-    system_program,
-    system_instruction::transfer,
+    system_instruction, system_program,
     sysvar::{rent, Sysvar},
 };
 
@@ -22,13 +21,14 @@ pub fn create_order_instruction(
     token_account: &Pubkey,
     token_mint_account: &Pubkey,
     token_authority_account: &Pubkey,
+    execution_authority: &Pubkey,
     side: OrderSide,
     price: u64,
     quantity: u64,
 ) -> Result<Instruction, std::io::Error> {
     let escrow_name: &[u8] = match side {
         OrderSide::Buy => b"sol_escrow",
-        OrderSide::Sell => b"token_escrow"
+        OrderSide::Sell => b"token_escrow",
     };
     let (escrow_key, bump_seed) =
         Pubkey::find_program_address(&[escrow_name, &order.to_bytes()], program_id);
@@ -49,6 +49,7 @@ pub fn create_order_instruction(
         AccountMeta::new_readonly(*token_mint_account, false),
         AccountMeta::new_readonly(*token_authority_account, !is_buy_side),
         AccountMeta::new(escrow_key, false),
+        AccountMeta::new_readonly(*execution_authority, true),
         AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new_readonly(rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
@@ -60,7 +61,7 @@ pub fn create_order_instruction(
     })
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
+#[derive(BorshSerialize, BorshDeserialize, Copy, Clone, Debug, PartialEq)]
 pub enum OrderSide {
     Buy,
     Sell,
@@ -70,12 +71,14 @@ pub enum OrderSide {
 pub struct OrderAccount {
     pub search_market: Pubkey,
     pub result: Pubkey,
-    pub proceeds_account: Pubkey,
+    pub sol_account: Pubkey,
     pub token_account: Pubkey,
     pub side: OrderSide,
     pub price: u64,
     pub quantity: u64,
     pub escrow_bump_seed: u8,
+    pub creation_slot: Slot,
+    pub execution_authority: Pubkey,
 }
 
 pub fn create_order(
@@ -90,11 +93,12 @@ pub fn create_order(
     let order_account_info = next_account_info(account_info_iter)?;
     let market_account_info = next_account_info(account_info_iter)?;
     let result_account_info = next_account_info(account_info_iter)?;
-    let proceeds_account_info = next_account_info(account_info_iter)?;
+    let sol_account_info = next_account_info(account_info_iter)?;
     let token_account_info = next_account_info(account_info_iter)?;
     let token_mint_account_info = next_account_info(account_info_iter)?;
     let token_authority_account_info = next_account_info(account_info_iter)?;
     let escrow_account_info = next_account_info(account_info_iter)?;
+    let execution_authority_account_info = next_account_info(account_info_iter)?;
     let spl_token_program_info = next_account_info(account_info_iter)?;
     let rent_account_info = next_account_info(account_info_iter)?;
     let system_program_info = next_account_info(account_info_iter)?;
@@ -107,6 +111,15 @@ pub fn create_order(
 
     if *rent_account_info.key != rent::id() {
         return Err(ProgramError::InvalidArgument);
+    }
+
+    let escrow_owner = if side == OrderSide::Buy {
+        system_program::id()
+    } else {
+        spl_token::id()
+    };
+    if *escrow_account_info.owner != escrow_owner {
+        return Err(ProgramError::IllegalOwner);
     }
 
     match side {
@@ -125,12 +138,16 @@ pub fn create_order(
             }
 
             invoke(
-                &transfer(
-                    proceeds_account_info.key,
+                &system_instruction::transfer(
+                    sol_account_info.key,
                     &escrow_account_info.key,
                     price * quantity,
                 ),
-                &[proceeds_account_info.clone(), escrow_account_info.clone(), system_program_info.clone()],
+                &[
+                    sol_account_info.clone(),
+                    escrow_account_info.clone(),
+                    system_program_info.clone(),
+                ],
             )?;
         }
         OrderSide::Sell => {
@@ -188,12 +205,14 @@ pub fn create_order(
     let order = OrderAccount {
         search_market: *market_account_info.key,
         result: *result_account_info.key,
-        proceeds_account: *proceeds_account_info.key,
+        sol_account: *sol_account_info.key,
         token_account: *token_account_info.key,
         side,
         price,
         quantity,
         escrow_bump_seed,
+        creation_slot: clock.slot,
+        execution_authority: *execution_authority_account_info.key,
     };
 
     order
@@ -219,6 +238,66 @@ pub mod test {
         transaction::Transaction,
     };
     use spl_token::state::Account;
+
+    pub fn setup_order(
+        order: &mut OrderAccount,
+        token_mint_account: &Pubkey,
+        token_authority_account: &Pubkey,
+        program_test: &mut ProgramTest,
+        program_id: &Pubkey,
+    ) -> (Pubkey, Pubkey, Instruction) {
+        let order_key = Pubkey::new_unique();
+        let (escrow_key, bump_seed, escrow_account) = match order.side {
+            OrderSide::Buy => {
+                let (escrow_key, bump_seed) = Pubkey::find_program_address(
+                    &[b"sol_escrow", &order_key.to_bytes()],
+                    &program_id,
+                );
+                let escrow_account = SolanaAccount::new(
+                    Rent::default().minimum_balance(0),
+                    0,
+                    &system_program::id(),
+                );
+                (escrow_key, bump_seed, escrow_account)
+            }
+            OrderSide::Sell => {
+                let (escrow_key, bump_seed) = Pubkey::find_program_address(
+                    &[b"token_escrow", &order_key.to_bytes()],
+                    &program_id,
+                );
+                let escrow_account = SolanaAccount::new(
+                    Rent::default().minimum_balance(spl_token::state::Account::LEN),
+                    spl_token::state::Account::LEN,
+                    &spl_token::id(),
+                );
+                (escrow_key, bump_seed, escrow_account)
+            }
+        };
+        program_test.add_account(escrow_key, escrow_account);
+        order.escrow_bump_seed = bump_seed;
+
+        let order_space = space(order).unwrap();
+        let order_min_balance = minimum_balance(order).unwrap();
+        let order_account = SolanaAccount::new(order_min_balance, order_space, &program_id);
+        program_test.add_account(order_key, order_account);
+        let create_order = create_order_instruction(
+            &program_id,
+            &order_key,
+            &order.search_market,
+            &order.result,
+            &order.sol_account,
+            &order.token_account,
+            token_mint_account,
+            token_authority_account,
+            &order.execution_authority,
+            order.side,
+            order.price,
+            order.quantity,
+        )
+        .unwrap();
+
+        return (order_key, escrow_key, create_order);
+    }
 
     #[tokio::test]
     async fn test_create_order_sell() {
@@ -271,43 +350,25 @@ pub mod test {
             &program_id,
         );
 
-        let order_key = Pubkey::new_unique();
-        let (escrow_key, bump_seed) =
-            Pubkey::find_program_address(&[b"token_escrow", &order_key.to_bytes()], &program_id);
-        let escrow_account = SolanaAccount::new(
-            Rent::default().minimum_balance(spl_token::state::Account::LEN),
-            spl_token::state::Account::LEN,
-            &spl_token::id(),
-        );
-        program_test.add_account(escrow_key, escrow_account);
-        let order = OrderAccount {
+        let mut order = OrderAccount {
             search_market: market_key,
             result: result_key,
-            proceeds_account: deposit_keypair.pubkey(),
+            sol_account: deposit_keypair.pubkey(),
             token_account: yes_token_pubkey,
             side: OrderSide::Sell,
             price: 500,
             quantity: 100,
-            escrow_bump_seed: bump_seed,
+            escrow_bump_seed: 0,
+            creation_slot: 1,
+            execution_authority: deposit_keypair.pubkey(),
         };
-        let order_space = space(&order).unwrap();
-        let order_min_balance = minimum_balance(&order).unwrap();
-        let order_account = SolanaAccount::new(order_min_balance, order_space, &program_id);
-        program_test.add_account(order_key, order_account);
-        let create_order = create_order_instruction(
-            &program_id,
-            &order_key,
-            &market_key,
-            &result_key,
-            &deposit_keypair.pubkey(),
-            &yes_token_pubkey,
+        let (order_key, escrow_key, create_order) = setup_order(
+            &mut order,
             &result.yes_mint,
             &deposit_keypair.pubkey(),
-            OrderSide::Sell,
-            500,
-            100,
-        )
-        .unwrap();
+            &mut program_test,
+            &program_id,
+        );
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction = Transaction::new_with_payer(
@@ -391,39 +452,25 @@ pub mod test {
             &program_id,
         );
 
-        let order_key = Pubkey::new_unique();
-        let (escrow_key, bump_seed) =
-            Pubkey::find_program_address(&[b"sol_escrow", &order_key.to_bytes()], &program_id);
-        let escrow_account = SolanaAccount::new(Rent::default().minimum_balance(0), 0, &program_id);
-        program_test.add_account(escrow_key, escrow_account);
-        let order = OrderAccount {
+        let mut order = OrderAccount {
             search_market: market_key,
             result: result_key,
-            proceeds_account: deposit_keypair.pubkey(),
+            sol_account: deposit_keypair.pubkey(),
             token_account: yes_token_pubkey,
             side: OrderSide::Buy,
             price: 500,
             quantity: 100,
-            escrow_bump_seed: bump_seed,
+            escrow_bump_seed: 0,
+            creation_slot: 1,
+            execution_authority: deposit_keypair.pubkey(),
         };
-        let order_space = space(&order).unwrap();
-        let order_min_balance = minimum_balance(&order).unwrap();
-        let order_account = SolanaAccount::new(order_min_balance, order_space, &program_id);
-        program_test.add_account(order_key, order_account);
-        let create_order = create_order_instruction(
-            &program_id,
-            &order_key,
-            &market_key,
-            &result_key,
-            &deposit_keypair.pubkey(),
-            &yes_token_pubkey,
+        let (order_key, escrow_key, create_order) = setup_order(
+            &mut order,
             &result.yes_mint,
             &deposit_keypair.pubkey(),
-            OrderSide::Buy,
-            500,
-            100,
-        )
-        .unwrap();
+            &mut program_test,
+            &program_id,
+        );
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction = Transaction::new_with_payer(
