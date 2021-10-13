@@ -55,6 +55,8 @@ class SearchMarketAccount {
 const SearchMarketAccountSchema: borsh.Schema = new Map([[SearchMarketAccount, {
     kind: 'struct',
     fields: [
+        ['account_type', 'u8'],
+        ['account_version', 'u8'],
         ['decision_authority', [32]],
         ['search_string', 'string'],
         ['best_result', [32]],
@@ -79,6 +81,8 @@ const ResultAccountSchema: borsh.Schema = new Map([[ResultAccount, {
     kind: 'struct',
     fields: [
         [
+            ['account_type', 'u8'],
+            ['account_version', 'u8'],
             ['search_market', [32]],
             ['url', 'string'],
             ['name', 'string'],

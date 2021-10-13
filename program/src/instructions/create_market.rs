@@ -11,7 +11,7 @@ use solana_program::{
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct SearchMarketAccount {
-    pub account_type: AccountType,
+    pub account_type: u8,
     pub account_version: u8,
     pub decision_authority: Pubkey,
     pub search_string: String,
@@ -26,7 +26,7 @@ impl SearchMarketAccount {
         expires_slot: Slot,
     ) -> SearchMarketAccount {
         SearchMarketAccount {
-            account_type: AccountType::SearchMarket,
+            account_type: AccountType::SearchMarket as u8,
             account_version: 0,
             decision_authority,
             search_string,

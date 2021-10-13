@@ -49,7 +49,7 @@ pub fn create_result_instruction(
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct ResultAccount {
-    pub account_type: AccountType,
+    pub account_type: u8,
     pub account_version: u8,
     pub search_market: Pubkey,
     pub url: String,
@@ -71,7 +71,7 @@ impl ResultAccount {
         bump_seed: u8,
     ) -> ResultAccount {
         ResultAccount {
-            account_type: AccountType::Result,
+            account_type: AccountType::Result as u8,
             account_version: 0,
             search_market,
             url,

@@ -70,7 +70,7 @@ pub enum OrderSide {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct OrderAccount {
-    pub account_type: AccountType,
+    pub account_type: u8,
     pub account_version: u8,
     pub search_market: Pubkey,
     pub result: Pubkey,
@@ -98,7 +98,7 @@ impl OrderAccount {
         execution_authority: Pubkey,
     ) -> OrderAccount {
         OrderAccount {
-            account_type: AccountType::Order,
+            account_type: AccountType::Order as u8,
             account_version: 0,
             search_market,
             result,

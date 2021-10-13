@@ -59,7 +59,7 @@ export default function Results() {
             setQuery(account.search_string);
             const resultFilters = [{
                 memcmp: {
-                    offset: 0,
+                    offset: 2,
                     bytes: marketPublicKey.toString()
                 }
             }];
