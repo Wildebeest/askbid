@@ -1,4 +1,5 @@
 use super::{SearchMarketAccount, SearchMarketInstruction};
+use crate::instructions::AccountType;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -69,6 +70,8 @@ pub enum OrderSide {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct OrderAccount {
+    pub account_type: AccountType,
+    pub account_version: u8,
     pub search_market: Pubkey,
     pub result: Pubkey,
     pub sol_account: Pubkey,
@@ -79,6 +82,36 @@ pub struct OrderAccount {
     pub escrow_bump_seed: u8,
     pub creation_slot: Slot,
     pub execution_authority: Pubkey,
+}
+
+impl OrderAccount {
+    pub fn new(
+        search_market: Pubkey,
+        result: Pubkey,
+        sol_account: Pubkey,
+        token_account: Pubkey,
+        side: OrderSide,
+        price: u64,
+        quantity: u64,
+        escrow_bump_seed: u8,
+        creation_slot: Slot,
+        execution_authority: Pubkey,
+    ) -> OrderAccount {
+        OrderAccount {
+            account_type: AccountType::Order,
+            account_version: 0,
+            search_market,
+            result,
+            sol_account,
+            token_account,
+            side,
+            price,
+            quantity,
+            escrow_bump_seed,
+            creation_slot,
+            execution_authority,
+        }
+    }
 }
 
 pub fn create_order(
@@ -202,18 +235,18 @@ pub fn create_order(
         }
     }
 
-    let order = OrderAccount {
-        search_market: *market_account_info.key,
-        result: *result_account_info.key,
-        sol_account: *sol_account_info.key,
-        token_account: *token_account_info.key,
+    let order = OrderAccount::new(
+        *market_account_info.key,
+        *result_account_info.key,
+        *sol_account_info.key,
+        *token_account_info.key,
         side,
         price,
         quantity,
         escrow_bump_seed,
-        creation_slot: clock.slot,
-        execution_authority: *execution_authority_account_info.key,
-    };
+        clock.slot,
+        *execution_authority_account_info.key,
+    );
 
     order
         .serialize(&mut &mut order_account_info.data.borrow_mut()[..])
@@ -227,7 +260,6 @@ pub mod test {
     use crate::instructions::test_utils::*;
     use crate::process_instruction;
     use crate::test_utils::*;
-    use crate::undecided_result;
     use crate::ResultAccount;
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
@@ -306,23 +338,19 @@ pub mod test {
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
         let decision_authority = Keypair::new();
-        let market = SearchMarketAccount {
-            decision_authority: decision_authority.pubkey(),
-            best_result: undecided_result::id(),
-            expires_slot: 2,
-            search_string: "cyberpunk".to_string(),
-        };
+        let market =
+            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 2);
         let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
 
-        let mut result = ResultAccount {
-            search_market: market_key,
-            url: String::from("http://cyberpunk.net"),
-            name: String::from("Cyberpunk website"),
-            snippet: String::from("A game fated to be legend"),
-            yes_mint: Pubkey::new_unique(),
-            no_mint: Pubkey::new_unique(),
-            bump_seed: 0,
-        };
+        let mut result = ResultAccount::new(
+            market_key,
+            String::from("http://cyberpunk.net"),
+            String::from("Cyberpunk website"),
+            String::from("A game fated to be legend"),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            0,
+        );
         let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
 
         let deposit_keypair = Keypair::new();
@@ -350,18 +378,18 @@ pub mod test {
             &program_id,
         );
 
-        let mut order = OrderAccount {
-            search_market: market_key,
-            result: result_key,
-            sol_account: deposit_keypair.pubkey(),
-            token_account: yes_token_pubkey,
-            side: OrderSide::Sell,
-            price: 500,
-            quantity: 100,
-            escrow_bump_seed: 0,
-            creation_slot: 1,
-            execution_authority: deposit_keypair.pubkey(),
-        };
+        let mut order = OrderAccount::new(
+            market_key,
+            result_key,
+            deposit_keypair.pubkey(),
+            yes_token_pubkey,
+            OrderSide::Sell,
+            500,
+            100,
+            0,
+            1,
+            deposit_keypair.pubkey(),
+        );
         let (order_key, escrow_key, create_order) = setup_order(
             &mut order,
             &result.yes_mint,
@@ -408,23 +436,19 @@ pub mod test {
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
         let decision_authority = Keypair::new();
-        let market = SearchMarketAccount {
-            decision_authority: decision_authority.pubkey(),
-            best_result: undecided_result::id(),
-            expires_slot: 2,
-            search_string: "cyberpunk".to_string(),
-        };
+        let market =
+            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 2);
         let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
 
-        let mut result = ResultAccount {
-            search_market: market_key,
-            url: String::from("http://cyberpunk.net"),
-            name: String::from("Cyberpunk website"),
-            snippet: String::from("A game fated to be legend"),
-            yes_mint: Pubkey::new_unique(),
-            no_mint: Pubkey::new_unique(),
-            bump_seed: 0,
-        };
+        let mut result = ResultAccount::new(
+            market_key,
+            String::from("http://cyberpunk.net"),
+            String::from("Cyberpunk website"),
+            String::from("A game fated to be legend"),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            0,
+        );
         let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
 
         let deposit_keypair = Keypair::new();
@@ -459,18 +483,18 @@ pub mod test {
             &system_program::id(),
         );
         program_test.add_account(sol_account_keypair.pubkey(), sol_account);
-        let mut order = OrderAccount {
-            search_market: market_key,
-            result: result_key,
-            sol_account: sol_account_keypair.pubkey(),
-            token_account: yes_token_pubkey,
-            side: OrderSide::Buy,
-            price: 500,
-            quantity: 100,
-            escrow_bump_seed: 0,
-            creation_slot: 1,
-            execution_authority: deposit_keypair.pubkey(),
-        };
+        let mut order = OrderAccount::new(
+            market_key,
+            result_key,
+            sol_account_keypair.pubkey(),
+            yes_token_pubkey,
+            OrderSide::Buy,
+            500,
+            100,
+            0,
+            1,
+            deposit_keypair.pubkey(),
+        );
         let (order_key, escrow_key, create_order) = setup_order(
             &mut order,
             &result.yes_mint,

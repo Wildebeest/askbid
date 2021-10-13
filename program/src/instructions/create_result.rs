@@ -1,4 +1,5 @@
 use super::{SearchMarketAccount, SearchMarketInstruction};
+use crate::instructions::AccountType;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -48,6 +49,8 @@ pub fn create_result_instruction(
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct ResultAccount {
+    pub account_type: AccountType,
+    pub account_version: u8,
     pub search_market: Pubkey,
     pub url: String,
     pub name: String,
@@ -55,6 +58,30 @@ pub struct ResultAccount {
     pub yes_mint: Pubkey,
     pub no_mint: Pubkey,
     pub bump_seed: u8,
+}
+
+impl ResultAccount {
+    pub fn new(
+        search_market: Pubkey,
+        url: String,
+        name: String,
+        snippet: String,
+        yes_mint: Pubkey,
+        no_mint: Pubkey,
+        bump_seed: u8,
+    ) -> ResultAccount {
+        ResultAccount {
+            account_type: AccountType::Result,
+            account_version: 0,
+            search_market,
+            url,
+            name,
+            snippet,
+            yes_mint,
+            no_mint,
+            bump_seed,
+        }
+    }
 }
 
 pub fn create_result(
@@ -135,15 +162,15 @@ pub fn create_result(
         ],
     )?;
 
-    let result = ResultAccount {
-        search_market: *market_account_info.key,
+    let result = ResultAccount::new(
+        *market_account_info.key,
         url,
         name,
         snippet,
-        yes_mint: *yes_mint_account_info.key,
-        no_mint: *no_mint_account_info.key,
+        *yes_mint_account_info.key,
+        *no_mint_account_info.key,
         bump_seed,
-    };
+    );
 
     result
         .serialize(&mut &mut result_account_info.data.borrow_mut()[..])
@@ -157,7 +184,6 @@ pub mod test {
     use crate::instructions::test_utils::setup_market;
     use crate::process_instruction;
     use crate::test_utils::*;
-    use crate::undecided_result;
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
     use solana_sdk::{
@@ -221,23 +247,19 @@ pub mod test {
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
         let decision_authority = Keypair::new();
-        let market = SearchMarketAccount {
-            decision_authority: decision_authority.pubkey(),
-            best_result: undecided_result::id(),
-            expires_slot: 1,
-            search_string: "cyberpunk".to_string(),
-        };
+        let market =
+            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 1);
         let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
 
-        let mut result = ResultAccount {
-            search_market: market_key,
-            url: String::from("http://cyberpunk.net"),
-            name: String::from("Cyberpunk website"),
-            snippet: String::from("A game fated to be legend"),
-            yes_mint: Pubkey::new_unique(),
-            no_mint: Pubkey::new_unique(),
-            bump_seed: 0,
-        };
+        let mut result = ResultAccount::new(
+            market_key,
+            String::from("http://cyberpunk.net"),
+            String::from("Cyberpunk website"),
+            String::from("A game fated to be legend"),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            0,
+        );
         let (result_key, create_result) = setup_result(&mut result, &mut program_test, &program_id);
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction =

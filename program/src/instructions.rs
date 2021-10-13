@@ -21,14 +21,20 @@ pub use cancel_order::{cancel_order, cancel_order_instruction};
 #[cfg(test)]
 pub mod test_utils {
     pub use super::create_market::test::*;
+    pub use super::create_order::test::*;
     pub use super::create_result::test::*;
     pub use super::decide::test::*;
     pub use super::deposit::test::*;
     pub use super::withdraw::test::*;
-    pub use super::create_order::test::*;
 }
 
-#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, Copy, Clone, Debug, PartialEq)]
+pub enum AccountType {
+    SearchMarket,
+    Result,
+    Order,
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub enum SearchMarketInstruction {
     CreateMarket {

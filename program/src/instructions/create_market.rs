@@ -1,5 +1,4 @@
-use super::SearchMarketInstruction;
-use crate::undecided_result;
+use super::{AccountType, SearchMarketInstruction};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -12,18 +11,28 @@ use solana_program::{
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct SearchMarketAccount {
+    pub account_type: AccountType,
+    pub account_version: u8,
     pub decision_authority: Pubkey,
     pub search_string: String,
     pub best_result: Pubkey,
     pub expires_slot: Slot,
 }
-impl std::fmt::Display for SearchMarketAccount {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "({}, {}, {})",
-            self.search_string, self.expires_slot, self.best_result
-        )
+
+impl SearchMarketAccount {
+    pub fn new(
+        decision_authority: Pubkey,
+        search_string: String,
+        expires_slot: Slot,
+    ) -> SearchMarketAccount {
+        SearchMarketAccount {
+            account_type: AccountType::SearchMarket,
+            account_version: 0,
+            decision_authority,
+            search_string,
+            expires_slot,
+            best_result: Pubkey::default(),
+        }
     }
 }
 
@@ -45,12 +54,8 @@ pub fn create_market(
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
-    let search_market = SearchMarketAccount {
-        decision_authority: *decision_authority_info.key,
-        best_result: undecided_result::id(),
-        search_string,
-        expires_slot,
-    };
+    let search_market =
+        SearchMarketAccount::new(*decision_authority_info.key, search_string, expires_slot);
 
     let result = search_market
         .serialize(&mut &mut market_account_info.data.borrow_mut()[..])
@@ -126,12 +131,8 @@ pub mod test {
             ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
         let decision_authority = Keypair::new();
-        let market = SearchMarketAccount {
-            decision_authority: decision_authority.pubkey(),
-            best_result: undecided_result::id(),
-            expires_slot: 0,
-            search_string: "cyberpunk".to_string(),
-        };
+        let market =
+            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 0);
         let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;

@@ -1,5 +1,4 @@
 use super::{ResultAccount, SearchMarketAccount, SearchMarketInstruction};
-use crate::undecided_result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -104,7 +103,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     let withdraw_amount = amount;
     let mut yes_amount = 0;
     let mut no_amount = 0;
-    if market.best_result == undecided_result::id() {
+    if market.best_result == Pubkey::default() {
         yes_amount = amount;
         no_amount = amount;
     } else if market.best_result == *result_account_info.key {
@@ -173,7 +172,6 @@ pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;
     use crate::process_instruction;
-    use crate::undecided_result;
     use crate::ResultAccount;
     use solana_program::program_pack::Pack;
     use solana_program_test::{processor, ProgramTest};
@@ -206,23 +204,19 @@ pub mod test {
                 ProgramTest::new("askbid", program_id, processor!(process_instruction));
 
             let decision_authority = Keypair::new();
-            let market = SearchMarketAccount {
-                decision_authority: decision_authority.pubkey(),
-                best_result: undecided_result::id(),
-                expires_slot: 1,
-                search_string: "cyberpunk".to_string(),
-            };
+            let market =
+                SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 1);
             let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
 
-            let mut result = ResultAccount {
-                search_market: market_key,
-                url: String::from("http://cyberpunk.net"),
-                name: String::from("Cyberpunk website"),
-                snippet: String::from("A game fated to be legend"),
-                yes_mint: Pubkey::new_unique(),
-                no_mint: Pubkey::new_unique(),
-                bump_seed: 0,
-            };
+            let mut result = ResultAccount::new(
+                market_key,
+                String::from("http://cyberpunk.net"),
+                String::from("Cyberpunk website"),
+                String::from("A game fated to be legend"),
+                Pubkey::new_unique(),
+                Pubkey::new_unique(),
+                0,
+            );
             let (result_key, create_result) =
                 setup_result(&mut result, &mut program_test, &program_id);
 

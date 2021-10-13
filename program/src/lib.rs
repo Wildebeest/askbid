@@ -5,7 +5,6 @@ use solana_program::{
 use thiserror::Error;
 mod instructions;
 use instructions::*;
-mod undecided_result;
 
 #[cfg(test)]
 mod test_utils;
@@ -60,7 +59,6 @@ pub fn process_instruction(
             sol_escrow_bump_seed,
             token_escrow_bump_seed,
         ),
-        SearchMarketInstruction::CancelOrder =>
-            cancel_order(program_id, accounts)
+        SearchMarketInstruction::CancelOrder => cancel_order(program_id, accounts),
     }
 }
