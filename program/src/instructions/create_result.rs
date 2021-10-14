@@ -6,6 +6,7 @@ use solana_program::{
     clock::Clock,
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
+    msg,
     program::invoke,
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -107,28 +108,38 @@ pub fn create_result(
     }
 
     if *market_account_info.owner != *program_id {
+        msg!("Market not owned by program");
         return Err(ProgramError::InvalidAccountData);
     }
     let market = SearchMarketAccount::try_from_slice(*market_account_info.data.borrow())?;
     if market.expires_slot < clock.slot {
+        msg!(
+            "Market already expired: {} > {}",
+            market.expires_slot,
+            clock.slot
+        );
         return Err(ProgramError::InvalidAccountData);
     }
 
     if url::Url::parse(&url).is_err() {
+        msg!("Url did not parse");
         return Err(ProgramError::InvalidArgument);
     }
 
     if Pubkey::create_program_address(&[b"mint_authority", &[bump_seed]], program_id)?
         != *mint_authority_info.key
     {
+        msg!("Mint authority invalid");
         return Err(ProgramError::InvalidArgument);
     }
 
     if *rent_account_info.key != rent::id() {
+        msg!("Rent account invalid");
         return Err(ProgramError::InvalidAccountData);
     }
 
     if *spl_token_account_info.key != spl_token::id() {
+        msg!("Token program account invalid");
         return Err(ProgramError::InvalidAccountData);
     }
 

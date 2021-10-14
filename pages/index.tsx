@@ -101,7 +101,7 @@ export default function Home() {
     const submitSearch = async event => {
         const provider = getProvider();
         const epochInfo = await connection.getEpochInfo();
-        const slot = epochInfo.absoluteSlot + 25;
+        const slot = epochInfo.absoluteSlot + 216250;
         const data = borsh.serialize(InstructionSchema, new Instruction({
             instruction: "CreateMarket",
             CreateMarket: new CreateMarket(slot, query),
