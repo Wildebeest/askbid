@@ -1,4 +1,5 @@
 use super::{ResultAccount, SearchMarketAccount, SearchMarketInstruction};
+use crate::LAMPORTS_PER_TOKEN;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -100,7 +101,11 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
     }
 
     invoke_signed(
-        &transfer(deposit_account_info.key, mint_authority_info.key, amount),
+        &transfer(
+            deposit_account_info.key,
+            mint_authority_info.key,
+            amount * LAMPORTS_PER_TOKEN,
+        ),
         &[
             deposit_account_info.clone(),
             mint_authority_info.clone(),
@@ -200,8 +205,11 @@ pub mod test {
         program_id: &Pubkey,
     ) -> Instruction {
         let deposit_min_balance = Rent::default().minimum_balance(0);
-        let deposit_account =
-            SolanaAccount::new(deposit_min_balance + amount, 0, &system_program::id());
+        let deposit_account = SolanaAccount::new(
+            deposit_min_balance + amount * LAMPORTS_PER_TOKEN,
+            0,
+            &system_program::id(),
+        );
         program_test.add_account(*deposit_key, deposit_account);
 
         let deposit_instruction = deposit_instruction(
@@ -298,7 +306,7 @@ pub mod test {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(mint_authority_account.lamports, 100);
+        assert_eq!(mint_authority_account.lamports, 100 * LAMPORTS_PER_TOKEN);
 
         let deposit_account = banks_client
             .get_account(deposit_keypair.pubkey())

@@ -12,6 +12,8 @@ mod test_utils;
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum SearchMarketError {}
 
+pub const LAMPORTS_PER_TOKEN: u64 = 100_000;
+
 solana_program::declare_id!("CtRJbPMscDFRJptvh6snF5GJXDNCJHMFsfYoczds37AV");
 entrypoint!(process_instruction);
 

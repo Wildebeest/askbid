@@ -1,4 +1,5 @@
 use super::{ResultAccount, SearchMarketAccount, SearchMarketInstruction};
+use crate::LAMPORTS_PER_TOKEN;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -100,7 +101,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let withdraw_amount = amount;
+    let withdraw_amount = amount * LAMPORTS_PER_TOKEN;
     let mut yes_amount = 0;
     let mut no_amount = 0;
     if market.best_result == Pubkey::default() {
@@ -315,7 +316,10 @@ pub mod test {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(withdraw_min_balance + 99, withdraw_account.lamports);
+        assert_eq!(
+            withdraw_min_balance + 99 * LAMPORTS_PER_TOKEN,
+            withdraw_account.lamports
+        );
 
         let yes_token_account = banks_client
             .get_account(withdraw_test.yes_token_pubkey)
