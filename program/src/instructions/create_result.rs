@@ -114,7 +114,7 @@ pub fn create_result(
     let market = SearchMarketAccount::try_from_slice(*market_account_info.data.borrow())?;
     if market.expires_slot < clock.slot {
         msg!(
-            "Market already expired: {} > {}",
+            "Market already expired: {} < {}",
             market.expires_slot,
             clock.slot
         );

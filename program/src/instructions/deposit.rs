@@ -6,6 +6,7 @@ use solana_program::{
     clock::Clock,
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
+    msg,
     program::invoke_signed,
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -51,15 +52,25 @@ pub fn deposit_instruction(
 pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let market_account_info = next_account_info(account_info_iter)?;
+    msg!("Market {}", market_account_info.key.to_string());
     let result_account_info = next_account_info(account_info_iter)?;
+    msg!("result {}", result_account_info.key.to_string());
     let deposit_account_info = next_account_info(account_info_iter)?;
+    msg!("deposit {}", deposit_account_info.key.to_string());
     let system_program_info = next_account_info(account_info_iter)?;
+    msg!("system {}", system_program_info.key.to_string());
     let spl_token_program_info = next_account_info(account_info_iter)?;
+    msg!("spl {}", spl_token_program_info.key.to_string());
     let mint_authority_info = next_account_info(account_info_iter)?;
+    msg!("mint auth {}", mint_authority_info.key.to_string());
     let yes_mint_account_info = next_account_info(account_info_iter)?;
+    msg!("yes mint {}", yes_mint_account_info.key.to_string());
     let yes_token_account_info = next_account_info(account_info_iter)?;
+    msg!("yes token {}", yes_token_account_info.key.to_string());
     let no_mint_account_info = next_account_info(account_info_iter)?;
+    msg!("no mint {}", no_mint_account_info.key.to_string());
     let no_token_account_info = next_account_info(account_info_iter)?;
+    msg!("no token {}", no_token_account_info.key.to_string());
     let clock = Clock::get()?;
 
     if *market_account_info.owner != *program_id {
@@ -100,6 +111,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
         return Err(ProgramError::InvalidAccountData);
     }
 
+    msg!("transfer sol");
     invoke_signed(
         &transfer(
             deposit_account_info.key,
@@ -114,6 +126,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
         &[&[b"mint_authority", &[result.bump_seed]]],
     )?;
 
+    msg!("mint yes");
     invoke_signed(
         &spl_token::instruction::mint_to(
             spl_token_program_info.key,
@@ -132,6 +145,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
         &[&[b"mint_authority", &[result.bump_seed]]],
     )?;
 
+    msg!("mint no");
     invoke_signed(
         &spl_token::instruction::mint_to(
             spl_token_program_info.key,
