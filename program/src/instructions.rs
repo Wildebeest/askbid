@@ -38,7 +38,7 @@ pub enum AccountType {
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub enum SearchMarketInstruction {
     CreateMarket {
-        expires_slot: Slot,
+        expires_slot_offset: u64,
         search_string: String,
     },
     CreateResult {

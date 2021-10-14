@@ -100,16 +100,15 @@ export default function Home() {
 
     const submitSearch = async event => {
         const provider = getProvider();
-        const epochInfo = await connection.getEpochInfo();
-        const slot = epochInfo.absoluteSlot + 216250;
+        const slotOffset = 172800;
         const data = borsh.serialize(InstructionSchema, new Instruction({
             instruction: "CreateMarket",
-            CreateMarket: new CreateMarket(slot, query),
+            CreateMarket: new CreateMarket(slotOffset, query),
         }));
         const searchMarketAccount = new SearchMarketAccount({
             decision_authority: provider.publicKey.toBytes(),
             search_string: query,
-            expires_slot: slot,
+            expires_slot: 0,
             best_result: PublicKey.default.toBytes()
         });
         const accountSize = borsh.serialize(SearchMarketAccountSchema, searchMarketAccount).byteLength;
@@ -144,7 +143,7 @@ export default function Home() {
         transaction.partialSign(marketAccountKey);
         const signedTransaction = await provider.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-        await connection.confirmTransaction(signature);
+        await connection.confirmTransaction(signature, 'confirmed');
         await router.push(`/results/${marketAccountKey.publicKey}`);
     };
     return (

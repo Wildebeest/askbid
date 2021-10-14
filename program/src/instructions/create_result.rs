@@ -260,7 +260,7 @@ pub mod test {
         let decision_authority = Keypair::new();
         let market =
             SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 1);
-        let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
+        let (market_key, create_market) = setup_market(&market, 1, &mut program_test, &program_id);
 
         let mut result = ResultAccount::new(
             market_key,

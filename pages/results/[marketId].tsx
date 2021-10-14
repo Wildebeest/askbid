@@ -17,11 +17,12 @@ import {
     ResultAccount
 } from "../../lib/client";
 
-function Result(props: {result: ResultAccount}) {
+function Result(props: { result: ResultAccount }) {
     return (
         <div className="py-2 flex">
             <div className="mr-4 text-center flex flex-col w-8">
-                <button className="border rounded bg-green-50 border-green-100 hover:bg-green-200 hover:border-green-300">😍
+                <button
+                    className="border rounded bg-green-50 border-green-100 hover:bg-green-200 hover:border-green-300">😍
                 </button>
             </div>
             <div>
@@ -38,10 +39,12 @@ export default function Results() {
     const router = useRouter();
     const [searchMarket, setSearchMarket] = useState<SearchMarketAccount>();
     const [query, setQuery] = useState<string>("");
-    const [resultAccounts, setResultAccounts] = useState<Map<string, { pubkey: PublicKey, account: ResultAccount }>>(new Map());
+    const [resultAccounts, setResultAccounts] = useState<{ pubkey: PublicKey, account: ResultAccount }[]>([]);
 
-    const onProgramAccountChange = (keyedAccountInfo: KeyedAccountInfo, context: Context) => {
+    const onProgramAccountChange = (keyedAccountInfo: KeyedAccountInfo, _context: Context) => {
         console.log(keyedAccountInfo);
+        const account = borsh.deserialize(ResultAccountSchema, ResultAccount, keyedAccountInfo.accountInfo.data);
+        setResultAccounts(resultAccounts => [...resultAccounts, {pubkey: keyedAccountInfo.accountId, account}]);
     };
 
     useEffect(() => {
@@ -57,19 +60,24 @@ export default function Results() {
             const account = borsh.deserialize(SearchMarketAccountSchema, SearchMarketAccount, accountInfo.data);
             setSearchMarket(account);
             setQuery(account.search_string);
-            const resultFilters = [{
-                memcmp: {
-                    offset: 2,
-                    bytes: marketPublicKey.toString()
+            const resultFilters = [
+                {
+                    memcmp: {
+                        offset: 2,
+                        bytes: marketPublicKey.toString()
+                    }
                 }
-            }];
-            connection.onProgramAccountChange(PROGRAM_ID, onProgramAccountChange, null, resultFilters);
-            const results = await connection.getProgramAccounts(PROGRAM_ID, {filters: resultFilters});
-            const newResultAccounts = new Map(results.map((result) => [result.pubkey.toString(), {
-                pubkey: result.pubkey,
-                account: borsh.deserialize(ResultAccountSchema, ResultAccount, result.account.data)
-            }]));
-            resultAccounts.forEach((v, k) => newResultAccounts.set(k, v));
+            ];
+            connection.onProgramAccountChange(PROGRAM_ID, onProgramAccountChange, 'confirmed', resultFilters);
+            const results = await connection.getProgramAccounts(PROGRAM_ID, {commitment: 'confirmed', filters: resultFilters});
+            const newResultAccounts = results.map(
+                (result) => {
+                    return {
+                        pubkey: result.pubkey,
+                        account: borsh.deserialize(ResultAccountSchema, ResultAccount, result.account.data)
+                    };
+                }
+            );
             setResultAccounts(newResultAccounts);
         })();
     }, [router]);
@@ -89,7 +97,7 @@ export default function Results() {
                 </div>
             </div>
             <div className="pl-2 pr-4">
-                {Array.from(resultAccounts.values()).map((result) =>
+                {resultAccounts.map((result) =>
                     <Result result={result.account} key={result.pubkey.toString()}/>)}
             </div>
         </div>

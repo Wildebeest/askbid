@@ -2,11 +2,13 @@ use super::{AccountType, SearchMarketInstruction};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Slot,
+    clock::{Clock, Slot},
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
+    msg,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvar::Sysvar,
 };
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
@@ -39,12 +41,18 @@ impl SearchMarketAccount {
 pub fn create_market(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
-    expires_slot: Slot,
+    expires_slot_offset: u64,
     search_string: String,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
     let market_account_info = next_account_info(account_info_iter)?;
     let decision_authority_info = next_account_info(account_info_iter)?;
+    let clock = Clock::get().unwrap();
+
+    msg!("Expires Slot Offset {}", expires_slot_offset);
+    if expires_slot_offset == 0 {
+        return Err(ProgramError::InvalidArgument);
+    }
 
     if !market_account_info.data.borrow().iter().all(|&b| b == 0) {
         return Err(ProgramError::AccountAlreadyInitialized);
@@ -54,8 +62,11 @@ pub fn create_market(
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
-    let search_market =
-        SearchMarketAccount::new(*decision_authority_info.key, search_string, expires_slot);
+    let search_market = SearchMarketAccount::new(
+        *decision_authority_info.key,
+        search_string,
+        clock.slot + expires_slot_offset,
+    );
 
     let result = search_market
         .serialize(&mut &mut market_account_info.data.borrow_mut()[..])
@@ -69,11 +80,11 @@ pub fn create_market_instruction(
     program_id: &Pubkey,
     market_pubkey: &Pubkey,
     decision_pubkey: &Pubkey,
-    expires_slot: Slot,
+    expires_slot_offset: u64,
     search_string: String,
 ) -> Result<Instruction, std::io::Error> {
     let data = SearchMarketInstruction::CreateMarket {
-        expires_slot,
+        expires_slot_offset,
         search_string,
     }
     .try_to_vec()?;
@@ -102,6 +113,7 @@ pub mod test {
 
     pub fn setup_market(
         market: &SearchMarketAccount,
+        expires_slot_offset: u64,
         program_test: &mut ProgramTest,
         program_id: &Pubkey,
     ) -> (Pubkey, Instruction) {
@@ -117,7 +129,7 @@ pub mod test {
             program_id,
             &market_key,
             &market.decision_authority,
-            market.expires_slot,
+            expires_slot_offset,
             market.search_string.clone(),
         )
         .unwrap();
@@ -132,8 +144,8 @@ pub mod test {
 
         let decision_authority = Keypair::new();
         let market =
-            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 0);
-        let (market_key, create_market) = setup_market(&market, &mut program_test, &program_id);
+            SearchMarketAccount::new(decision_authority.pubkey(), "cyberpunk".to_string(), 2);
+        let (market_key, create_market) = setup_market(&market, 1, &mut program_test, &program_id);
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
         let mut transaction = Transaction::new_with_payer(&[create_market], Some(&payer.pubkey()));

@@ -25,9 +25,9 @@ pub fn process_instruction(
     msg!("Instruction: {:?}", instruction);
     match instruction {
         SearchMarketInstruction::CreateMarket {
-            expires_slot,
+            expires_slot_offset,
             search_string,
-        } => create_market(program_id, accounts, expires_slot, search_string),
+        } => create_market(program_id, accounts, expires_slot_offset, search_string),
         SearchMarketInstruction::CreateResult {
             url,
             name,
