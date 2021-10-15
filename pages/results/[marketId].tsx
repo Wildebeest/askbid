@@ -89,7 +89,7 @@ function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: P
                 <div className="text-gray-500">{probability}</div>
             </div>
             <div>
-                <a href={props.result.url} className="text-l font-semibold text-blue-600" target="_blank">
+                <a href={props.result.url} className="text-l font-semibold text-blue-600" target="_blank" rel="noreferrer">
                     {props.result.name}
                 </a>
                 <div>{props.result.snippet}</div>
