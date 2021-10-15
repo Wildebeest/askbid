@@ -14,10 +14,11 @@ class Instruction {
     CreateOrder?: CreateOrder;
     instruction: string;
 
-    constructor(fields: { instruction: string, CreateMarket?: CreateMarket, CreateResult?: CreateResult, Deposit?: Deposit, CreateOrder?: CreateOrder }) {
+    constructor(fields: { instruction: string, CreateMarket?: CreateMarket, CreateResult?: CreateResult, Deposit?: Deposit, CreateOrder?: CreateOrder, Decide?: Decide }) {
         this.CreateMarket = fields.CreateMarket;
         this.CreateResult = fields.CreateResult;
         this.Deposit = fields.Deposit;
+        this.Decide = fields.Decide;
         this.CreateOrder = fields.CreateOrder;
         this.instruction = fields.instruction;
     }

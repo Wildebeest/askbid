@@ -18,34 +18,7 @@ import {
     SearchMarketAccountSchema,
     SearchMarketAccount
 } from "../lib/client";
-
-interface ConnectOpts {
-    onlyIfTrusted: boolean;
-}
-
-type PhantomEvent = "disconnect" | "connect";
-
-interface PhantomProvider {
-    publicKey?: PublicKey;
-    isConnected?: boolean;
-    signTransaction: (transaction: Transaction) => Promise<Transaction>;
-    on: (event: PhantomEvent, handler: (args: any) => void) => void;
-    connect: (opts?: Partial<ConnectOpts>) => Promise<{ publicKey: PublicKey }>;
-}
-
-const getProvider = (): PhantomProvider | undefined => {
-    if (!process.browser) {
-        return;
-    }
-    if ("solana" in window) {
-        const anyWindow: any = window;
-        const provider = anyWindow.solana;
-        if (provider.isPhantom) {
-            return provider;
-        }
-    }
-    window.open("https://phantom.app/", "_blank");
-};
+import {getProvider} from "../lib/phantom";
 
 
 function WalletButton(props) {
@@ -89,9 +62,9 @@ function SearchButton(props) {
 }
 
 export default function Home() {
+    const [connection, setConnection] = useState<Connection>(new Connection("http://127.0.0.1:8899", 'confirmed'));
     const [isConnected, setConnected] = useState<boolean>(false);
     const [query, setQuery] = useState<string>("");
-    const connection = new Connection("http://127.0.0.1:8899", 'confirmed');
     const router = useRouter();
 
     const onQueryChange = event => {

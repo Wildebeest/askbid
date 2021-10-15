@@ -6,7 +6,7 @@ import {
     AccountInfo,
     KeyedAccountInfo,
     Context,
-    PublicKey,
+    PublicKey, TransactionInstruction, Transaction,
 } from "@solana/web3.js";
 import * as borsh from 'borsh';
 import {
@@ -14,21 +14,78 @@ import {
     SearchMarketAccountSchema,
     PROGRAM_ID,
     ResultAccountSchema,
-    ResultAccount, OrderSchema, Order, LAMPORTS_PER_TOKEN
+    ResultAccount, OrderSchema, Order, LAMPORTS_PER_TOKEN, Instruction, InstructionSchema, Decide
 } from "../../lib/client";
+import {getProvider} from "../../lib/phantom";
 
-function Result(props: { result: ResultAccount, bestResult: PublicKey, lowestAsk: Order | undefined }) {
+function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: PublicKey, lowestAsk: Order | undefined, connection: Connection, onBestResultChange: (PublicKey) => void }) {
+    const router = useRouter();
+    const onDecide = async () => {
+        if (props.bestResult.toString() !== PublicKey.default.toString()) {
+            return;
+        }
+
+        const connection = props.connection;
+        const provider = getProvider();
+        const marketPublicKey = new PublicKey(router.query.marketId);
+        const decisionData = borsh.serialize(InstructionSchema, new Instruction({
+            instruction: "Decide",
+            Decide: new Decide(),
+        }));
+        const decideInstruction = new TransactionInstruction({
+            keys: [
+                {
+                    pubkey: marketPublicKey,
+                    isSigner: false,
+                    isWritable: true,
+                },
+                {
+                    pubkey: provider.publicKey,
+                    isSigner: true,
+                    isWritable: false
+                },
+                {
+                    pubkey: props.pubKey,
+                    isSigner: false,
+                    isWritable: false
+                }
+            ], programId: PROGRAM_ID, data: Buffer.from(decisionData)
+        });
+        const recentBlockhash = (await connection.getRecentBlockhash()).blockhash;
+        const transaction = (new Transaction({recentBlockhash, feePayer: provider.publicKey}))
+            .add(decideInstruction);
+        const signedTransaction = await provider.signTransaction(transaction);
+        const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+        await connection.confirmTransaction(signature, 'confirmed');
+        props.onBestResultChange(props.pubKey);
+    };
+
     let probability = "--%";
     if (props.lowestAsk) {
         probability = `${(props.lowestAsk.price.toNumber() / LAMPORTS_PER_TOKEN * 100).toFixed(2)}%`;
     }
 
+    let decideButton = null;
+    if (props.bestResult.toString() === PublicKey.default.toString())
+    {
+        decideButton = (<button
+            className="border rounded bg-green-50 border-green-100 hover:bg-green-200 hover:border-green-300"
+            onClick={onDecide}>⭐️
+        </button>);
+    } else if (props.bestResult.toString() === props.pubKey.toString()) {
+        decideButton = (<button
+            className="border rounded bg-green-200 border-green-300">⭐️
+        </button>);
+    } else {
+        decideButton = (<button
+            className="border rounded bg-green-50 border-green-100 opacity-50" disabled>⭐️
+        </button>);
+    }
+
     return (
         <div className="py-2 flex">
             <div className="mr-4 text-center flex flex-col w-12">
-                <button
-                    className="border rounded bg-green-50 border-green-100 hover:bg-green-200 hover:border-green-300">⭐️
-                </button>
+                {decideButton}
                 <div className="text-gray-500">{probability}</div>
             </div>
             <div>
@@ -43,6 +100,7 @@ function Result(props: { result: ResultAccount, bestResult: PublicKey, lowestAsk
 
 export default function Results() {
     const router = useRouter();
+    const [connection, setConnection] = useState<Connection>(new Connection("http://127.0.0.1:8899", 'confirmed'));
     const [searchMarket, setSearchMarket] = useState<SearchMarketAccount>();
     const [query, setQuery] = useState<string>("");
     const [resultAccounts, setResultAccounts] = useState<Map<string, ResultAccount>>(new Map());
@@ -88,7 +146,6 @@ export default function Results() {
     };
 
     useEffect(() => {
-        const connection = new Connection("http://127.0.0.1:8899", 'confirmed');
         (async () => {
             const {marketId} = router.query;
             if (!marketId) {
@@ -117,7 +174,7 @@ export default function Results() {
                 onProgramAccountChange({accountId: account.pubkey, accountInfo: account.account});
             }
         })();
-    }, [router]);
+    }, [router, connection]);
     return (
         <div>
             <Head>
@@ -138,8 +195,8 @@ export default function Results() {
                 <div className="text-right text-sm"><a className="text-blue-600" onClick={onSortClick}>Sort</a></div>
                 {Array.from(resultAccounts.entries()).map((entry) => {
                     const [pubkey, result] = entry;
-                    return <Result result={result} key={pubkey} bestResult={bestResult}
-                                   lowestAsk={lowestAsks.get(pubkey)}/>;
+                    return <Result result={result} key={pubkey} pubKey={new PublicKey(pubkey)} bestResult={bestResult}
+                                   lowestAsk={lowestAsks.get(pubkey)} connection={connection} onBestResultChange={setBestResult}/>;
                 })}
             </div>
         </div>
