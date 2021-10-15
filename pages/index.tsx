@@ -144,6 +144,28 @@ export default function Home() {
                         </div>
                     </div>
                 </div>
+                <hr className="my-12 mx-4" />
+                <div className="flex flex-col">
+                    <div className="text-center text-xl mb-6 text-2xl">What is a decentralized search exchange?</div>
+                    <div className="flex flex-row ml-4 mr-4 space-x-4">
+                        <div className="flex flex-col">
+                            <div className="text-center mb-4 text-5xl">🔎</div>
+                            You post a search query to the exchange, where many search engines can see it.
+                        </div>
+                        <div>
+                            <div className="text-center mb-4 text-5xl">📈</div>
+                            The search engines find results, and bid on whether you will like them.
+                        </div>
+                        <div>
+                            <div className="text-center mb-4 text-5xl">⭐️</div>
+                            You visit the results, and mark the one you find most useful.
+                        </div>
+                        <div>
+                            <div className="text-center mb-4 text-5xl">💸</div>
+                            The search engines that were right are paid by the ones that were wrong.
+                        </div>
+                    </div>
+                </div>
 
             </main>
         </div>
