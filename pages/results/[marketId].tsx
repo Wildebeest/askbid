@@ -66,8 +66,7 @@ function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: P
     }
 
     let decideButton = null;
-    if (props.bestResult.toString() === PublicKey.default.toString())
-    {
+    if (props.bestResult.toString() === PublicKey.default.toString()) {
         decideButton = (<button
             className="border rounded bg-green-50 border-green-100 hover:bg-green-200 hover:border-green-300"
             onClick={onDecide}>⭐️
@@ -89,7 +88,8 @@ function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: P
                 <div className="text-gray-500">{probability}</div>
             </div>
             <div>
-                <a href={props.result.url} className="text-l font-semibold text-blue-600" target="_blank" rel="noreferrer">
+                <a href={props.result.url} className="text-l font-semibold text-blue-600" target="_blank"
+                   rel="noreferrer">
                     {props.result.name}
                 </a>
                 <div>{props.result.snippet}</div>
@@ -109,9 +109,7 @@ export default function Results() {
 
     const onResultChange = (keyedAccountInfo: KeyedAccountInfo) => {
         const account = borsh.deserialize(ResultAccountSchema, ResultAccount, keyedAccountInfo.accountInfo.data);
-        setResultAccounts(resultAccounts =>
-            resultAccounts.set(keyedAccountInfo.accountId.toString(), account)
-        );
+        setResultAccounts(resultAccounts => new Map(resultAccounts.set(keyedAccountInfo.accountId.toString(), account)));
     };
 
     const onOrderChange = (keyedAccountInfo: KeyedAccountInfo) => {
@@ -175,6 +173,12 @@ export default function Results() {
             }
         })();
     }, [router, connection]);
+    const results = Array.from(resultAccounts.entries()).map((entry) => {
+        const [pubkey, result] = entry;
+        return (<Result result={result} key={pubkey} pubKey={new PublicKey(pubkey)} bestResult={bestResult}
+                        lowestAsk={lowestAsks.get(pubkey)} connection={connection}
+                        onBestResultChange={setBestResult}/>);
+    });
     return (
         <div>
             <Head>
@@ -193,11 +197,7 @@ export default function Results() {
             </div>
             <div className="pl-2 pr-4">
                 <div className="text-right text-sm"><a className="text-blue-600" onClick={onSortClick}>Sort</a></div>
-                {Array.from(resultAccounts.entries()).map((entry) => {
-                    const [pubkey, result] = entry;
-                    return <Result result={result} key={pubkey} pubKey={new PublicKey(pubkey)} bestResult={bestResult}
-                                   lowestAsk={lowestAsks.get(pubkey)} connection={connection} onBestResultChange={setBestResult}/>;
-                })}
+                {results}
             </div>
         </div>
     );
