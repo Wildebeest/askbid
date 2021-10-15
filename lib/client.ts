@@ -1,5 +1,6 @@
 import {PublicKey} from "@solana/web3.js";
 import * as borsh from "borsh";
+import BN from "bn.js";
 
 const PROGRAM_ID = new PublicKey("CtRJbPMscDFRJptvh6snF5GJXDNCJHMFsfYoczds37AV");
 const LAMPORTS_PER_TOKEN = 100000;
@@ -91,8 +92,8 @@ class Order {
     sol_account: Uint8Array;
     token_account: Uint8Array;
     side: number;
-    price: number;
-    quantity: number;
+    price: BN;
+    quantity: BN;
     escrow_bump_seed: number;
     creation_slot: number;
     execution_authority: Uint8Array;
@@ -116,8 +117,8 @@ class Order {
         this.sol_account = fields.sol_account;
         this.token_account = fields.token_account;
         this.side = fields.side;
-        this.price = fields.price;
-        this.quantity = fields.quantity;
+        this.price = new BN(fields.price);
+        this.quantity = new BN(fields.quantity);
         this.escrow_bump_seed = fields.escrow_bump_seed;
         this.creation_slot = fields.creation_slot;
         this.execution_authority = fields.execution_authority;

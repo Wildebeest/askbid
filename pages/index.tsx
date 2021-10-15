@@ -19,20 +19,6 @@ import {
     SearchMarketAccount
 } from "../lib/client";
 
-function SearchButton(props) {
-    let hoverStates = "opacity-50";
-    if (props.isConnected) {
-        hoverStates = "hover:bg-green-400 hover:border-green-500";
-    }
-    return (
-        <button
-            className={"mr-3 bg-green-200 border border-green-300 py-3 px-4 rounded " + hoverStates}
-            onClick={props.onClick}>
-            Ask the internet
-        </button>
-    );
-}
-
 interface ConnectOpts {
     onlyIfTrusted: boolean;
 }
@@ -84,6 +70,20 @@ function WalletButton(props) {
             onClick={onClick}
             className="mr-3 bg-purple-200 border border-purple-300 py-3 px-4 rounded hover:bg-purple-400 hover:border-purple-500">
             Setup a wallet
+        </button>
+    );
+}
+
+function SearchButton(props) {
+    let hoverStates = "opacity-50";
+    if (props.isConnected) {
+        hoverStates = "hover:bg-green-400 hover:border-green-500";
+    }
+    return (
+        <button
+            className={"mr-3 bg-green-200 border border-green-300 py-3 px-4 rounded " + hoverStates}
+            onClick={props.onClick}>
+            Ask the internet
         </button>
     );
 }
