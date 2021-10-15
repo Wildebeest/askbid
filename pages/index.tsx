@@ -62,7 +62,7 @@ function SearchButton(props) {
 }
 
 export default function Home() {
-    const [connection, setConnection] = useState<Connection>(new Connection("http://127.0.0.1:8899", 'confirmed'));
+    const [connection, setConnection] = useState<Connection>(new Connection(process.env.NEXT_PUBLIC_ENDPOINT, 'confirmed'));
     const [isConnected, setConnected] = useState<boolean>(false);
     const [query, setQuery] = useState<string>("");
     const router = useRouter();

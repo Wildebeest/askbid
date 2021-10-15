@@ -100,7 +100,7 @@ function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: P
 
 export default function Results() {
     const router = useRouter();
-    const [connection, setConnection] = useState<Connection>(new Connection("http://127.0.0.1:8899", 'confirmed'));
+    const [connection, setConnection] = useState<Connection>(new Connection(process.env.NEXT_PUBLIC_ENDPOINT, 'confirmed'));
     const [searchMarket, setSearchMarket] = useState<SearchMarketAccount>();
     const [query, setQuery] = useState<string>("");
     const [resultAccounts, setResultAccounts] = useState<Map<string, ResultAccount>>(new Map());
