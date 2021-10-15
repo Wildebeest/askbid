@@ -54,7 +54,7 @@ pub fn cancel_order(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramRes
 
     let order = OrderAccount::try_from_slice(*order_account_info.data.borrow()).unwrap();
     solana_program::msg!("{:?}", sol_account_info);
-    match order.side {
+    match order.side.into() {
         OrderSide::Buy => invoke_signed(
             &system_instruction::transfer(
                 escrow_account_info.key,
@@ -186,7 +186,7 @@ pub mod test {
         let cancel_order = cancel_order_instruction(
             &program_id,
             &order_key,
-            order.side,
+            order.side.into(),
             &order.sol_account,
             &order.token_account,
             &order.execution_authority,
@@ -297,7 +297,7 @@ pub mod test {
         let cancel_order = cancel_order_instruction(
             &program_id,
             &order_key,
-            order.side,
+            order.side.into(),
             &order.sol_account,
             &order.token_account,
             &order.execution_authority,

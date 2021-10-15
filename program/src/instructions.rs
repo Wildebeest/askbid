@@ -55,7 +55,7 @@ pub enum SearchMarketInstruction {
     },
     Decide,
     CreateOrder {
-        side: OrderSide,
+        side: u8,
         price: u64,
         quantity: u64,
         escrow_bump_seed: u8,

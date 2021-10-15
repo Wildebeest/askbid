@@ -26,7 +26,7 @@ function Result(props: { result: ResultAccount }) {
                 </button>
             </div>
             <div>
-                <a href={props.result.url} className="text-l font-semibold text-blue-600">
+                <a href={props.result.url} className="text-l font-semibold text-blue-600" target="_blank">
                     {props.result.name}
                 </a>
                 <div>{props.result.snippet}</div>
@@ -91,7 +91,7 @@ export default function Results() {
                 <div className="pt-8 pr-5 pl-2 text-xl">🚀 AskBid 🌚</div>
                 <div className="flex border border-gray-200 rounded m-4 p-4 shadow text-xl flex-1">
                     <div>🔎</div>
-                    <input type="text" className="w-full outline-none px-3" name="query" value={query}
+                    <input type="text" className="w-full outline-none px-3" name="query" value={query} autoComplete="off"
                            onChange={(event) => setQuery(event.target.value)}/>
                     <div>🇺🇸</div>
                 </div>

@@ -160,7 +160,7 @@ export default function Home() {
 
                         <div className="flex border border-gray-200 rounded p-4 shadow text-xl">
                             <div>🔎</div>
-                            <input type="text" className="w-full outline-none px-3" name="query" required
+                            <input type="text" className="w-full outline-none px-3" name="query" required autoComplete="off"
                                    onChange={onQueryChange} value={query}/>
                             <div>🇺🇸</div>
                         </div>
