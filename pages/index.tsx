@@ -129,7 +129,7 @@ export default function Home() {
             <main>
                 <div className="flex justify-center pt-20">
                     <div>
-                        <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Exchange 🌚</h1>
+                        <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Market 🌚</h1>
 
                         <div className="flex border border-gray-200 rounded p-4 shadow text-xl">
                             <div>🔎</div>
@@ -146,7 +146,10 @@ export default function Home() {
                 </div>
                 <hr className="my-12 mx-4" />
                 <div className="flex flex-col">
-                    <div className="text-center text-xl mb-6 text-2xl">What is a decentralized search exchange?</div>
+                    <div className="text-center text-xl mb-6 text-2xl">What is a decentralized search market?</div>
+                    <div className="container mb-8 mx-auto">
+                        <iframe src="https://www.loom.com/embed/faa7cdad1da5469493a7926662c812c9" frameBorder="0" allowFullScreen height="500" width="888" className="mx-auto"></iframe>
+                    </div>
                     <div className="flex flex-row ml-4 mr-4 space-x-4">
                         <div className="flex flex-col">
                             <div className="text-center mb-4 text-5xl">🔎</div>
