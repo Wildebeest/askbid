@@ -4,11 +4,11 @@ module.exports = {
     webpack: (config, {buildId, dev, isServer, defaultLoaders, webpack}) => {
         config.plugins.push(
             new BugsnagBuildReporterPlugin({
-                apiKey: process.env.BUGSNAG_API_KEY,
+                apiKey: process.env.NEXT_PUBLIC_BUGSNAG_API_KEY,
                 appVersion: buildId
             }),
             new BugsnagSourceMapUploaderPlugin({
-                apiKey: process.env.BUGSNAG_API_KEY,
+                apiKey: process.env.NEXT_PUBLIC_BUGSNAG_API_KEY,
                 appVersion: buildId
             })
         );
