@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "author": "Matt Wilde <wilde@outlook.com>",
   "license": "MIT",
+  "repository": "github:Wildebeest/askbid",
   "scripts": {
     "dev": "next dev",
     "start": "next start",
