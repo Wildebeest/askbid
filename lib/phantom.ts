@@ -22,8 +22,8 @@ export function getProvider(): PhantomProvider | undefined {
         const anyWindow: any = window;
         const provider = anyWindow.solana;
         if (provider.isPhantom) {
+            console.log(provider);
             return provider;
         }
     }
-    window.open("https://phantom.app/", "_blank");
 }
