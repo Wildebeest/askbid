@@ -22,8 +22,8 @@ import {getProvider} from "../lib/phantom";
 
 
 function WalletButton(props) {
-    const provider = getProvider();
     useEffect(() => {
+        const provider = getProvider();
         if (!provider) {
             return;
         }
@@ -32,10 +32,11 @@ function WalletButton(props) {
             props.setConnected(true);
         });
         provider.connect({onlyIfTrusted: true});
-    }, [provider, props]);
+    }, [props]);
 
-    const onClick = () => {
-        provider.connect();
+    const onClick = async () => {
+        const provider = getProvider();
+        await provider.connect();
     }
 
     return (
