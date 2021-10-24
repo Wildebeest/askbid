@@ -22,9 +22,20 @@ import {getProvider} from "../lib/phantom";
 
 
 function WalletButton(props) {
+    const [provider, setProvider] = useState(getProvider());
+    const [intervalHandle, setIntervalHandle] = useState<number>();
     useEffect(() => {
-        const provider = getProvider();
         if (!provider) {
+            const interval = setInterval(() => {
+                const provider = getProvider();
+                setProvider(provider);
+                if (provider) {
+                    clearInterval(intervalHandle);
+                }
+            }, 500);
+
+            // @ts-ignore
+            setIntervalHandle(interval);
             return;
         }
 
@@ -32,11 +43,12 @@ function WalletButton(props) {
             props.setConnected(true);
         });
         provider.connect({onlyIfTrusted: true});
-    }, [props]);
+    }, [provider, props]);
 
     const onClick = async () => {
-        const provider = getProvider();
-        await provider.connect();
+        if(provider) {
+            await provider.connect();
+        }
     }
 
     return (
