@@ -190,6 +190,7 @@ pub fn create_result(
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::instructions::test_utils::setup_market;

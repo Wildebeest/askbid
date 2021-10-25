@@ -156,6 +156,7 @@ pub fn fill_order(
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;
@@ -217,17 +218,18 @@ pub mod test {
             &program_id,
         );
 
-        let seller_sol_pubkey = Pubkey::new_unique();
+        let seller_sol_keypair = Keypair::new();
         let seller_sol_account = SolanaAccount::new(
-            Rent::default().minimum_balance(0),
+            Rent::default().minimum_balance(0)
+                + Rent::default().minimum_balance(spl_token::state::Account::LEN),
             0,
-            &deposit_keypair.pubkey(),
+            &system_program::id(),
         );
-        program_test.add_account(seller_sol_pubkey, seller_sol_account);
+        program_test.add_account(seller_sol_keypair.pubkey(), seller_sol_account);
         let mut sell_order = OrderAccount::new(
             market_key,
             result_key,
-            seller_sol_pubkey,
+            seller_sol_keypair.pubkey(),
             yes_token_pubkey,
             OrderSide::Sell,
             500,
@@ -244,6 +246,13 @@ pub mod test {
             &program_id,
         );
 
+        let buyer_sol_keypair = Keypair::new();
+        let buyer_sol_account = SolanaAccount::new(
+            2 * Rent::default().minimum_balance(0) + 500 * 100,
+            0,
+            &system_program::id(),
+        );
+        program_test.add_account(buyer_sol_keypair.pubkey(), buyer_sol_account);
         let (buy_token_pubkey, init_buy_token) = setup_token(
             &result.yes_mint,
             &deposit_keypair.pubkey(),
@@ -252,7 +261,7 @@ pub mod test {
         let mut buy_order = OrderAccount::new(
             market_key,
             result_key,
-            deposit_keypair.pubkey(),
+            buyer_sol_keypair.pubkey(),
             buy_token_pubkey,
             OrderSide::Buy,
             501,
@@ -280,13 +289,27 @@ pub mod test {
         .unwrap();
 
         let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
-        let mut transaction = Transaction::new_with_payer(
+        let mut setup_transaction = Transaction::new_with_payer(
             &[
                 create_market,
                 create_result,
                 init_yes_token,
                 init_no_token,
                 deposit_instruction,
+            ],
+            Some(&payer.pubkey()),
+        );
+        setup_transaction.sign(
+            &[&payer, &decision_authority, &deposit_keypair],
+            recent_blockhash,
+        );
+        banks_client
+            .process_transaction(setup_transaction)
+            .await
+            .unwrap();
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
                 create_sell_order,
                 init_buy_token,
                 create_buy_order,
@@ -295,13 +318,18 @@ pub mod test {
             Some(&payer.pubkey()),
         );
         transaction.sign(
-            &[&payer, &decision_authority, &deposit_keypair],
+            &[
+                &payer,
+                &deposit_keypair,
+                &buyer_sol_keypair,
+                &seller_sol_keypair,
+            ],
             recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.unwrap();
 
         let seller_sol_account = banks_client
-            .get_account(seller_sol_pubkey)
+            .get_account(seller_sol_keypair.pubkey())
             .await
             .unwrap()
             .unwrap();

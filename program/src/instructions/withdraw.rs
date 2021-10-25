@@ -6,6 +6,7 @@ use solana_program::{
     clock::Clock,
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
+    msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -35,7 +36,7 @@ pub fn withdraw_instruction(
         AccountMeta::new(*withdraw_pubkey, true),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
-        AccountMeta::new_readonly(mint_authority_key, false),
+        AccountMeta::new(mint_authority_key, false),
         AccountMeta::new_readonly(*token_owner_pubkey, true),
         AccountMeta::new(*yes_mint_pubkey, false),
         AccountMeta::new(*yes_token_pubkey, false),
@@ -113,6 +114,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
         no_amount = amount;
     }
 
+    msg!("transfer sol escrow to withdraw");
     invoke_signed(
         &transfer(
             mint_authority_info.key,
@@ -128,6 +130,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     )?;
 
     if yes_amount > 0 {
+        msg!("burn yes tokens");
         invoke(
             &spl_token::instruction::burn(
                 spl_token_program_info.key,
@@ -147,6 +150,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
     }
 
     if no_amount > 0 {
+        msg!("burn no tokens");
         invoke(
             &spl_token::instruction::burn(
                 spl_token_program_info.key,
@@ -169,6 +173,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> P
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;
@@ -295,17 +300,25 @@ pub mod test {
 
         let (mut banks_client, payer, recent_blockhash) = withdraw_test.program_test.start().await;
 
-        let mut transaction = Transaction::new_with_payer(
-            &[withdraw_test.instructions, vec![withdraw_instruction]].concat(),
-            Some(&payer.pubkey()),
-        );
-        transaction.sign(
+        let mut setup_transaction =
+            Transaction::new_with_payer(&withdraw_test.instructions, Some(&payer.pubkey()));
+        setup_transaction.sign(
             &[
                 &payer,
                 &withdraw_test.decision_authority,
                 &withdraw_test.deposit_keypair,
-                &withdraw_keypair,
             ],
+            recent_blockhash,
+        );
+        banks_client
+            .process_transaction(setup_transaction)
+            .await
+            .unwrap();
+
+        let mut transaction =
+            Transaction::new_with_payer(&[withdraw_instruction], Some(&payer.pubkey()));
+        transaction.sign(
+            &[&payer, &withdraw_test.deposit_keypair, &withdraw_keypair],
             recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.unwrap();

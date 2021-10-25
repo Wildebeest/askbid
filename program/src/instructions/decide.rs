@@ -69,6 +69,7 @@ pub fn decide(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;

@@ -168,6 +168,7 @@ pub fn deposit(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> Pr
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::instructions::test_utils::*;

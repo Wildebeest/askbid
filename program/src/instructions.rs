@@ -19,6 +19,7 @@ mod cancel_order;
 pub use cancel_order::{cancel_order, cancel_order_instruction};
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test_utils {
     pub use super::create_market::test::*;
     pub use super::create_order::test::*;

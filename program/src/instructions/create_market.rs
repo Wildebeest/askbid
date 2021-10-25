@@ -100,6 +100,7 @@ pub fn create_market_instruction(
 }
 
 #[cfg(test)]
+#[cfg(feature = "test-bpf")]
 pub mod test {
     use super::*;
     use crate::process_instruction;
