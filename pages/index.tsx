@@ -55,7 +55,7 @@ function WalletButton(props) {
         <button
             onClick={onClick}
             className="mr-3 bg-purple-200 border border-purple-300 py-3 px-4 rounded hover:bg-purple-400 hover:border-purple-500">
-            Setup a wallet
+            Setup a Devnet wallet (Phantom only for now)
         </button>
     );
 }
