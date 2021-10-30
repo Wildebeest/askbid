@@ -161,7 +161,9 @@ export default function Home() {
                 <div className="flex flex-col">
                     <div className="text-center text-xl mb-6 text-2xl">What is a decentralized search market?</div>
                     <div className="container mb-8 mx-auto">
-                        <iframe src="https://www.loom.com/embed/faa7cdad1da5469493a7926662c812c9" frameBorder="0" allowFullScreen height="500" width="888" className="mx-auto"></iframe>
+                        <iframe width="888" height="500"
+                                src="https://www.youtube.com/embed/MRHTWFL9WPg"
+                                frameBorder="0" className="mx-auto" />
                     </div>
                     <div className="flex flex-row ml-4 mr-4 space-x-4">
                         <div className="flex flex-col">
