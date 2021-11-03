@@ -1,0 +1,6 @@
+[book]
+authors = ["Matt Wilde"]
+language = "en"
+multilingual = false
+src = "src"
+title = "AskBid: A Decentralized Search Market"
