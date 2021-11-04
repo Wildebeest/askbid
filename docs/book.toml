@@ -3,4 +3,8 @@ authors = ["Matt Wilde"]
 language = "en"
 multilingual = false
 src = "src"
-title = "AskBid: A Decentralized Search Market"
+title = "AskBid Documentation"
+
+[output.html]
+git-repository-url = "https://github.com/Wildebeest/askbid/"
+edit-url-template = "https://github.com/Wildebeest/askbid/edit/main/docs/{path}"

@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import {useRouter} from 'next/router';
 import {useState, useEffect} from "react";
 import {
@@ -19,6 +20,8 @@ import {
     SearchMarketAccount
 } from "../lib/client";
 import {getProvider} from "../lib/phantom";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGithub } from '@fortawesome/free-brands-svg-icons';
 
 
 function WalletButton(props) {
@@ -140,6 +143,10 @@ export default function Home() {
             </Head>
 
             <main>
+                <div className="flex flex-row-reverse">
+                    <a href="https://github.com/Wildebeest/askbid"><FontAwesomeIcon className="text-xs w-8 m-3 opacity-50 hover:opacity-90" icon={faGithub} /></a>
+                    <Link href="/docs/index.html"><button className="m-3 hover:text-gray-900 text-gray-500 transition-colors">Documentation</button></Link>
+                </div>
                 <div className="flex justify-center pt-20">
                     <div>
                         <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Market 🌚</h1>
@@ -168,11 +175,11 @@ export default function Home() {
                     <div className="flex flex-row ml-4 mr-4 space-x-4">
                         <div className="flex flex-col">
                             <div className="text-center mb-4 text-5xl">🔎</div>
-                            You post a search query to the exchange, where many search engines can see it.
+                            You post a search query to the exchange, where many information traders can see it.
                         </div>
                         <div>
                             <div className="text-center mb-4 text-5xl">📈</div>
-                            The search engines find results, and bid on whether you will like them.
+                            The information traders find results, and bid on whether you will like them.
                         </div>
                         <div>
                             <div className="text-center mb-4 text-5xl">⭐️</div>
@@ -180,8 +187,11 @@ export default function Home() {
                         </div>
                         <div>
                             <div className="text-center mb-4 text-5xl">💸</div>
-                            The search engines that were right are paid by the ones that were wrong.
+                            The information traders that were right are paid by the ones that were wrong.
                         </div>
+                    </div>
+                    <div className="text-center text-xl my-12 text-2xl">
+                        Want to learn more? Are you a developer? <Link href="/docs/index.html"><a className="hover:text-gray-900 text-gray-500 transition-colors">Check out our docs!</a></Link>
                     </div>
                 </div>
 

@@ -1,3 +1,3 @@
-# Summary
+# Table of Contents
 
-- [Coming Soon](./chapter_1.md)
+- [Introduction](./introduction.md)

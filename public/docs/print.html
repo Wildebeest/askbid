@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>AskBid: A Decentralized Search Market</title>
+        <title>AskBid Documentation</title>
         <meta name="robots" content="noindex" />
         <!-- Custom HTML head -->
         <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="chapter_1.html"><strong aria-hidden="true">1.</strong> Coming Soon</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -105,11 +105,14 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">AskBid: A Decentralized Search Market</h1>
+                    <h1 class="menu-title">AskBid Documentation</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Wildebeest/askbid/" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
                     </div>
                 </div>
@@ -135,8 +138,47 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="coming-soon"><a class="header" href="#coming-soon">Coming Soon</a></h1>
-<p>Adding some text to test build caching.</p>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p><strong>AskBid</strong> is a decentralized search market on the Solana blockchain. It utilizes a novel price discovery mechanism to find the best answer for a user's query.</p>
+<p>Here to build an information trading bot? Check out our walkthrough!</p>
+<p>Here to build an alternate frontend? Check out our walkthrough!</p>
+<p>Confused? Read on...</p>
+<hr />
+<h2 id="remind-me-how-do-search-engines-work"><a class="header" href="#remind-me-how-do-search-engines-work">Remind me, how do search engines work?</a></h2>
+<p>Traditional search engines like Google or Bing have four large responsibilities.</p>
+<ol>
+<li>Crawl the internet for useful content.</li>
+<li>Serve a website that can receive search queries from users.</li>
+<li>Efficiently respond with useful content for each search query.</li>
+<li>Mix in advertisements with the content to make money.</li>
+</ol>
+<p>The internet has organized itself around this model of information retrieval for the past 20 years.</p>
+<h2 id="whats-the-problem-with-this"><a class="header" href="#whats-the-problem-with-this">What's the problem with this?</a></h2>
+<p>This model puts the search engine in conflict with the rest of the internet.</p>
+<ul>
+<li>Users want their answers as quickly as possible. Search engines have a strong incentive to extract useful content from the web and show it directly to the user. This means that the search engine gets paid rather than the actual content producer.</li>
+<li>As an ads-based business, search engines must choose between serving their financial interest or serving their users. Over time, search engines find the maximum amount of ad-load they can place in front of the relevant content they've extracted from the internet.</li>
+<li>As a central gatekeeper, there is a strong temptation for search engines to use their position to shape the content produced on the internet. For example, Google used their central position to push a technology called AMP so that websites would stop using advertising providers other than Google.</li>
+</ul>
+<p>These market forces are very strong. It means that search users today get the maximum amount of ads they can tolerate, followed by editorialized results from a shrinking internet that is unsupported by revenue.</p>
+<h2 id="ok-so-how-does-a-search-exchange-work"><a class="header" href="#ok-so-how-does-a-search-exchange-work">Ok, so how does a search exchange work?</a></h2>
+<p>Users need an efficient way to find answers that are most relevant to them. A search exchange realigns the incentives so that the most profitable result is also the most relevant result.</p>
+<ol>
+<li>A <strong>user</strong> submits a query via a <strong>frontend</strong> to the exchange, along with some SOL. This repo contains a Web2 frontend for submitting queries where the user pays the listing fee from a wallet they control. In the long run, hopefully there will be multiple frontends.</li>
+<li><strong>Information traders</strong> are notified of a query by Solana and list results they think are relevant on the exchange. Each result opens a limited-time prediction market around the question &quot;Will the user who submitted the query mark this result as most relevant?&quot;</li>
+<li><strong>Information traders</strong> can mint token pairs against a result by escrowing some SOL with the exchange. A &quot;yes&quot; token can be redeemed for escrowed SOL if the user decides that this result is the most relevant. A &quot;no&quot; token can be redeemed for escrowed SOL if the user chooses a different result, or if the user does not choose a result before the market expires.</li>
+<li><strong>Information traders</strong> then trade these tokens on the exchange. These tokens derive their value from the underlying SOL, and their price will converge to the probability that the user will decide that this result is the most relevant.</li>
+<li>The <strong>frontend</strong> observes the current market prices of the tokens for each result and uses them to rank the results. This repo contains a simple frontend that just sorts by descending price.</li>
+<li>The <strong>user</strong> decides which result is most relevant and submits a decision to the exchange via the <strong>frontend</strong>. The exchange then refunds the user a redemption amount of SOL with their query.</li>
+</ol>
+<h2 id="how-does-that-address-the-problems-with-traditional-search-engines"><a class="header" href="#how-does-that-address-the-problems-with-traditional-search-engines">How does that address the problems with traditional search engines?</a></h2>
+<p>Each participant in the search market must find it more profitable to return relevant user results than to engage in alternate activities.</p>
+<ul>
+<li>The <strong>frontend</strong> should find it more profitable to serve relevant results than ads. This is accomplished by granting the frontend a cut of the fees charged to information traders.</li>
+<li><strong>Content producers</strong> can list their results directly without waiting for bots to crawl their sites, and sell &quot;no&quot; tokens to get compensated for the value they are providing.</li>
+<li><strong>Information traders</strong> can get started with ranking areas they are familiar with rather than needing to build a good general search engine to get any traffic. </li>
+<li>Since the firehose of queries, results, and decisions is public on the Solana blockchain, <strong>information traders</strong> with novel ranking ideas can test them more easily.</li>
+</ul>
 
                     </main>
 
