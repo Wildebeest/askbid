@@ -27,6 +27,7 @@
     "webpack-bugsnag-plugins": "^1.8.0"
   },
   "dependencies": {
+    "@askbid/client": "file:./client",
     "@bugsnag/core": "^7.13.2",
     "@bugsnag/js": "^7.13.2",
     "@bugsnag/plugin-react": "^7.13.2",

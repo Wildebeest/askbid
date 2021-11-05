@@ -1,5 +1,6 @@
 import {useRouter} from 'next/router';
 import Head from 'next/head';
+import Link from 'next/link';
 import {useEffect, useState} from "react";
 import {
     Connection,
@@ -15,7 +16,7 @@ import {
     PROGRAM_ID,
     ResultAccountSchema,
     ResultAccount, OrderSchema, Order, LAMPORTS_PER_TOKEN, Instruction, InstructionSchema, Decide
-} from "../../lib/client";
+} from "@askbid/client";
 import {getProvider} from "../../lib/phantom";
 
 function Result(props: { result: ResultAccount, pubKey: PublicKey, bestResult: PublicKey, lowestAsk: Order | undefined, connection: Connection, onBestResultChange: (PublicKey) => void }) {
@@ -186,7 +187,7 @@ export default function Results() {
                 <link rel="icon" href="/favicon.ico"/>
             </Head>
             <div className="flex">
-                <div className="pt-8 pr-5 pl-2 text-xl">🚀 AskBid 🌚</div>
+                <Link href="/"><a className="pt-8 pr-5 pl-2 text-xl">🚀 AskBid 🌚</a></Link>
                 <div className="flex border border-gray-200 rounded m-4 p-4 shadow text-xl flex-1">
                     <div>🔎</div>
                     <input type="text" className="w-full outline-none px-3" name="query" value={query}

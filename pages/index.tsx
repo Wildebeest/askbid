@@ -18,7 +18,7 @@ import {
     CreateMarket,
     SearchMarketAccountSchema,
     SearchMarketAccount
-} from "../lib/client";
+} from "@askbid/client";
 import {getProvider} from "../lib/phantom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGithub } from '@fortawesome/free-brands-svg-icons';
