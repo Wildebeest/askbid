@@ -4,21 +4,9 @@ import {useRouter} from 'next/router';
 import {useState, useEffect} from "react";
 import {
     Connection,
-    Keypair,
-    TransactionInstruction,
     Transaction,
-    SystemProgram,
-    PublicKey,
 } from "@solana/web3.js";
-import * as borsh from 'borsh';
-import {
-    PROGRAM_ID,
-    Instruction,
-    InstructionSchema,
-    CreateMarket,
-    SearchMarketAccountSchema,
-    SearchMarketAccount
-} from "@askbid/client";
+import {createMarket} from "@askbid/client";
 import {getProvider} from "../lib/phantom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGithub } from '@fortawesome/free-brands-svg-icons';
@@ -90,46 +78,10 @@ export default function Home() {
     const submitSearch = async event => {
         const provider = getProvider();
         const slotOffset = 172800;
-        const data = borsh.serialize(InstructionSchema, new Instruction({
-            instruction: "CreateMarket",
-            CreateMarket: new CreateMarket(slotOffset, query),
-        }));
-        const searchMarketAccount = new SearchMarketAccount({
-            decision_authority: provider.publicKey.toBytes(),
-            search_string: query,
-            expires_slot: 0,
-            best_result: PublicKey.default.toBytes()
-        });
-        const accountSize = borsh.serialize(SearchMarketAccountSchema, searchMarketAccount).byteLength;
-        const rentExemptAmount = await connection.getMinimumBalanceForRentExemption(accountSize);
-        const marketAccountKey = Keypair.generate();
-        const newAccountInstruction = SystemProgram.createAccount({
-            fromPubkey: provider.publicKey,
-            programId: PROGRAM_ID,
-            newAccountPubkey: marketAccountKey.publicKey,
-            lamports: rentExemptAmount,
-            space: accountSize
-        });
 
-        const transactionInstruction = new TransactionInstruction({
-            keys: [
-                {
-                    pubkey: marketAccountKey.publicKey,
-                    isSigner: false,
-                    isWritable: true,
-                },
-                {
-                    pubkey: provider.publicKey,
-                    isSigner: true,
-                    isWritable: false
-                }
-            ], programId: PROGRAM_ID, data: Buffer.from(data)
-        });
         const recentBlockhash = (await connection.getRecentBlockhash()).blockhash;
-        const transaction = (new Transaction({recentBlockhash, feePayer: provider.publicKey}))
-            .add(newAccountInstruction)
-            .add(transactionInstruction);
-        transaction.partialSign(marketAccountKey);
+        const transaction = (new Transaction({recentBlockhash, feePayer: provider.publicKey}));
+        const marketAccountKey = await createMarket(provider.publicKey, connection, transaction, provider.publicKey, slotOffset, query);
         const signedTransaction = await provider.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signedTransaction.serialize());
         await connection.confirmTransaction(signature, 'confirmed');

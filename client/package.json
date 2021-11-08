@@ -1,6 +1,6 @@
 {
   "name": "@askbid/client",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A JS/TS client for the AskBid Decentralized Search Market",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",

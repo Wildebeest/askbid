@@ -1,4 +1,4 @@
-import {PublicKey} from "@solana/web3.js";
+import {Connection, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction} from "@solana/web3.js";
 import * as borsh from "borsh";
 import BN from "bn.js";
 
@@ -259,6 +259,58 @@ const ResultAccountSchema: borsh.Schema = new Map([[ResultAccount, {
     ]
 }]]);
 
+function createMarketInstruction(market: PublicKey, decisionAuthority: PublicKey, slotOffset: number, query: string): TransactionInstruction {
+    const data = borsh.serialize(InstructionSchema, new Instruction({
+        instruction: "CreateMarket",
+        CreateMarket: new CreateMarket(slotOffset, query),
+    }));
+    return new TransactionInstruction({
+        keys: [
+            {
+                pubkey: market,
+                isSigner: false,
+                isWritable: true,
+            },
+            {
+                pubkey: decisionAuthority,
+                isSigner: true,
+                isWritable: false
+            }
+        ], programId: PROGRAM_ID, data: Buffer.from(data)
+    });
+}
+
+async function createMarket(
+    payer: PublicKey,
+    connection: Connection,
+    transaction: Transaction,
+    decisionAuthority: PublicKey,
+    slotOffset: number,
+    query: string
+): Promise<Keypair> {
+    const searchMarketAccount = new SearchMarketAccount({
+        decision_authority: decisionAuthority.toBytes(),
+        search_string: query,
+        expires_slot: 0,
+        best_result: PublicKey.default.toBytes()
+    });
+    const accountSize = borsh.serialize(SearchMarketAccountSchema, searchMarketAccount).byteLength;
+    const rentExemptAmount = await connection.getMinimumBalanceForRentExemption(accountSize);
+    const marketAccountKey = Keypair.generate();
+    const newAccountInstruction = SystemProgram.createAccount({
+        fromPubkey: payer,
+        programId: PROGRAM_ID,
+        newAccountPubkey: marketAccountKey.publicKey,
+        lamports: rentExemptAmount,
+        space: accountSize
+    });
+    const transactionInstruction = createMarketInstruction(marketAccountKey.publicKey, decisionAuthority, slotOffset, query);
+    transaction.add(newAccountInstruction)
+        .add(transactionInstruction);
+    transaction.partialSign(marketAccountKey);
+    return marketAccountKey;
+}
+
 export {
     PROGRAM_ID,
     Instruction,
@@ -267,6 +319,8 @@ export {
     CreateMarketSchema,
     CreateMarket,
     CreateResultSchema,
+    createMarketInstruction,
+    createMarket,
     CreateResult,
     SearchMarketAccountSchema,
     SearchMarketAccount,

@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 import * as borsh from "borsh";
 import BN from "bn.js";
 declare const PROGRAM_ID: PublicKey;
@@ -142,4 +142,6 @@ declare class ResultAccount {
     });
 }
 declare const ResultAccountSchema: borsh.Schema;
-export { PROGRAM_ID, Instruction, InstructionSchema, InstructionWrapperSchema, CreateMarketSchema, CreateMarket, CreateResultSchema, CreateResult, SearchMarketAccountSchema, SearchMarketAccount, ResultAccount, ResultAccountSchema, Deposit, DepositSchema, Withdraw, WithdrawSchema, Decide, DecideSchema, CreateOrder, CreateOrderSchema, Order, OrderSchema, LAMPORTS_PER_TOKEN, };
+declare function createMarketInstruction(market: PublicKey, decisionAuthority: PublicKey, slotOffset: number, query: string): TransactionInstruction;
+declare function createMarket(payer: PublicKey, connection: Connection, transaction: Transaction, decisionAuthority: PublicKey, slotOffset: number, query: string): Promise<Keypair>;
+export { PROGRAM_ID, Instruction, InstructionSchema, InstructionWrapperSchema, CreateMarketSchema, CreateMarket, CreateResultSchema, createMarketInstruction, createMarket, CreateResult, SearchMarketAccountSchema, SearchMarketAccount, ResultAccount, ResultAccountSchema, Deposit, DepositSchema, Withdraw, WithdrawSchema, Decide, DecideSchema, CreateOrder, CreateOrderSchema, Order, OrderSchema, LAMPORTS_PER_TOKEN, };
