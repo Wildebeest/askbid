@@ -5,3 +5,4 @@
 /.next
 /out
 *.tsbuildinfo
+/public/docs
