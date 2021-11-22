@@ -6,3 +6,4 @@
 /out
 *.tsbuildinfo
 /public/docs
+/public/client-docs
