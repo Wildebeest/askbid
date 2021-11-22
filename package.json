@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "next dev",
     "start": "next start",
-    "build": "next build && yarn run typedoc --out public/client-docs client/client.ts && cd docs && yarn && yarn build && cp -r build ../public/docs",
+    "build": "yarn run typedoc --out public/client-docs client/client.ts && cd docs && yarn && yarn build && cp -r build ../public/docs && cd .. && next build",
     "build-bpf": "cargo build-bpf --manifest-path=./program/Cargo.toml --bpf-out-dir=dist/program",
     "deploy": "solana program deploy dist/program/askbid.so"
   },
