@@ -10,7 +10,7 @@ const config = {
   tagline: 'A decentralized search protocol on Solana',
   url: 'https://askbid.vercel.app',
   baseUrl: '/docs/',
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
   organizationName: 'Wildebeest',
