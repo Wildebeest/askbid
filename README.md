@@ -1,4 +1,4 @@
-**AskBid** is a decentralized search market on the Solana blockchain. It utilizes a novel price discovery mechanism to find the best answer for a user's query.
+**AskBid** is a decentralized search protocol on the Solana blockchain. It utilizes a novel price discovery mechanism to find the best answer for a user's query.
 
 Try it out at https://askbid.vercel.app!
 

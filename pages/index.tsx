@@ -101,7 +101,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-center pt-20">
                     <div>
-                        <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Market 🌚</h1>
+                        <h1 className="mb-6 text-5xl">🚀 AskBid: A Search Protocol 🌚</h1>
 
                         <div className="flex border border-gray-200 rounded p-4 shadow text-xl">
                             <div>🔎</div>
@@ -118,16 +118,11 @@ export default function Home() {
                 </div>
                 <hr className="my-12 mx-4" />
                 <div className="flex flex-col">
-                    <div className="text-center text-xl mb-6 text-2xl">What is a decentralized search market?</div>
-                    <div className="container mb-8 mx-auto">
-                        <iframe width="888" height="500"
-                                src="https://www.youtube.com/embed/MRHTWFL9WPg"
-                                frameBorder="0" className="mx-auto" />
-                    </div>
+                    <div className="text-center text-xl mb-6 text-2xl">What is a search protocol?</div>
                     <div className="flex flex-row ml-4 mr-4 space-x-4">
                         <div className="flex flex-col">
                             <div className="text-center mb-4 text-5xl">🔎</div>
-                            You post a search query to the exchange, where many information traders can see it.
+                            You post a search query to the Solana blockchain, where many information traders can see it.
                         </div>
                         <div>
                             <div className="text-center mb-4 text-5xl">📈</div>
@@ -142,11 +137,7 @@ export default function Home() {
                             The information traders that were right are paid by the ones that were wrong.
                         </div>
                     </div>
-                    <div className="text-center text-xl my-12 text-2xl">
-                        Want to learn more? Are you a developer? <Link href="/docs/index.html"><a className="hover:text-gray-900 text-gray-500 transition-colors">Check out our docs!</a></Link>
-                    </div>
                 </div>
-
             </main>
         </div>
     )
