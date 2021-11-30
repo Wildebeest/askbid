@@ -17,11 +17,10 @@ pub const LAMPORTS_PER_TOKEN: u64 = 100_000;
 solana_program::declare_id!("CtRJbPMscDFRJptvh6snF5GJXDNCJHMFsfYoczds37AV");
 entrypoint!(process_instruction);
 
-// Program entrypoint's implementation
 pub fn process_instruction(
-    program_id: &Pubkey, // Public key of the account the hello world program was loaded into
-    accounts: &[AccountInfo], // The account to say hello to
-    input: &[u8],        // Ignored, all helloworld instructions are hellos
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    input: &[u8],
 ) -> ProgramResult {
     let instruction = SearchMarketInstruction::try_from_slice(input)?;
     msg!("Instruction: {:?}", instruction);
